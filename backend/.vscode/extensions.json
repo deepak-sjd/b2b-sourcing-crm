@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "vscjava.vscode-java-pack",
+    "vmware.vscode-spring-boot",
+    "vscjava.vscode-spring-initializr",
+    "vscjava.vscode-spring-boot-dashboard",
+    "redhat.vscode-xml",
+    "gabrielbb.vscode-lombok",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg"
+  ]
+}

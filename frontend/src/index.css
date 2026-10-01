@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens for DocTutorials CRM.
+ *
+ * This is a dense, internal operations tool used for hours at a time by
+ * counselors and admins — not a marketing surface. The palette stays quiet
+ * (near-white surface, a single indigo brand accent carried over from the
+ * client's existing product) so the six pipeline-stage colors below are the
+ * only saturated color in the UI and stay instantly legible in a scanning
+ * table. Every client deployment can retint --primary without touching
+ * component code.
+ */
+@layer base {
+  :root {
+    --background: 220 23% 97%;
+    --foreground: 222 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 20% 15%;
+
+    --primary: 243 62% 47%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 16% 94%;
+    --secondary-foreground: 222 20% 20%;
+
+    --muted: 220 16% 95%;
+    --muted-foreground: 222 10% 46%;
+
+    --accent: 243 62% 96%;
+    --accent-foreground: 243 62% 30%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 16% 89%;
+    --input: 220 16% 89%;
+    --ring: 243 62% 47%;
+
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 222 15% 30%;
+    --sidebar-border: 220 16% 91%;
+
+    /* Lead pipeline stage colors, ordered NEW -> WON / LOST */
+    --stage-new: 217 91% 60%;
+    --stage-contacted: 262 60% 58%;
+    --stage-qualified: 199 80% 46%;
+    --stage-meeting: 172 66% 38%;
+    --stage-opportunity: 32 92% 50%;
+    --stage-quotation: 330 70% 55%;
+    --stage-won: 152 60% 36%;
+    --stage-lost: 0 65% 52%;
+
+    --radius: 0.625rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+/* Utility for the fixed-height app shell (sidebar + topbar + scrollable content) */
+.app-shell {
+  height: 100dvh;
+}
+
+/* Thin, unobtrusive scrollbars for dense table/panel views */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}

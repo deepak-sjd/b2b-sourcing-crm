@@ -1,0 +1,137 @@
+spring:
+  application:
+    name: doctutorials-crm
+
+  threads:
+    virtual:
+      enabled:
+        true # Java 21 virtual threads - one per request, no platform-thread pool exhaustion
+        # under load, since our workload is I/O-bound (DB calls) not CPU-bound
+
+  datasource:
+    # Namespaced as CRM_* (not the generic DB_URL/DB_USERNAME/DB_PASSWORD) so this
+    # app can never silently collide with another project's environment variables
+    # on the same machine - exactly what happened during initial setup, where a
+    # pre-existing global DB_URL pointed at an unrelated "portfolio" database.
+    #
+    # Port 5434 (not the default 5432) - this dev machine also runs "portfolio"
+    # and "teacherOs" projects; teacherOs already claims 5433, so this project
+    # gets its own dedicated 5434 to avoid ever colliding with either.
+    url: ${CRM_DB_URL:jdbc:postgresql://localhost:5434/doctutorials_crm}
+    username: ${CRM_DB_USERNAME:crm_user}
+    password: ${CRM_DB_PASSWORD:crm_password}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate # schema is owned by Flyway migrations, never by Hibernate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 30
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+  mail:
+    # Only used when app.mail.enabled=true (SmtpMailService). While
+    # app.mail.enabled=false (the local-dev default), ConsoleMailService is
+    # active instead and none of this is touched.
+    host: ${CRM_SMTP_HOST:localhost}
+    port: ${CRM_SMTP_PORT:587}
+    username: ${CRM_SMTP_USERNAME:}
+    password: ${CRM_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+server:
+  # 8085 (not the common default 8080) - dedicated to this project so it never
+  # collides with portfolio/teacherOs if you happen to run more than one at once.
+  port: ${CRM_SERVER_PORT:8085}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+app:
+  jwt:
+    secret: ${CRM_JWT_SECRET:change-this-to-a-long-random-secret-in-every-real-environment}
+    access-token-expiry-minutes: 60
+    refresh-token-expiry-days: 14
+  pagination:
+    # Applied globally to every Pageable-bound endpoint via WebConfig - caps the
+    # blast radius of a client requesting an enormous page size against a
+    # multi-hundred-thousand-row table.
+    default-page-size: 20
+    max-page-size: 100
+  security:
+    max-failed-login-attempts: ${CRM_MAX_FAILED_LOGIN_ATTEMPTS:5}
+    lockout-duration-minutes: ${CRM_LOCKOUT_DURATION_MINUTES:15}
+  lead:
+    stale-lead-threshold-days: 7 # drives the "inactive for N days" risk alert
+  cors:
+    allowed-origins: ${CRM_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  frontend:
+    # Base URL the password-reset email links to; the frontend route reads
+    # ?token=... from here and calls POST /api/v1/auth/reset-password.
+    reset-password-url: ${CRM_FRONTEND_RESET_PASSWORD_URL:http://localhost:3000/reset-password}
+  mail:
+    # false = log the reset link instead of sending real email (local dev
+    # without SMTP creds). Set true once spring.mail.* above is configured
+    # with a real provider (SES, SendGrid SMTP, Mailgun, Gmail app password, etc).
+    enabled: ${CRM_MAIL_ENABLED:false}
+    from: ${CRM_MAIL_FROM:no-reply@doctutorials.local}
+  storage:
+    # local = files live on disk under storage.local.base-dir (default, works with
+    # zero setup). s3 = real S3-compatible bucket, see S3FileStorageService.
+    provider: ${CRM_STORAGE_PROVIDER:local}
+    max-file-size-mb: ${CRM_STORAGE_MAX_FILE_SIZE_MB:10} # keep in sync with spring.servlet.multipart above
+    local:
+      base-dir: ${CRM_STORAGE_LOCAL_DIR:./data/uploads}
+    s3:
+      bucket: ${CRM_S3_BUCKET:}
+      region: ${CRM_S3_REGION:ap-south-1}
+  seed:
+    # DataSeeder creates exactly one default Super Admin on first startup
+    # (only if the users table is empty) - solves the bootstrap problem where
+    # public registration can no longer grant elevated roles.
+    enabled: ${CRM_SEED_ENABLED:true}
+    admin-email: ${CRM_SEED_ADMIN_EMAIL:admin@doctutorials.local}
+    admin-password: ${CRM_SEED_ADMIN_PASSWORD:ChangeMe123!} # CHANGE in any real environment
+
+logging:
+  level:
+    root: INFO
+    com.doctutorials.crm: DEBUG
+    org.hibernate.SQL: WARN

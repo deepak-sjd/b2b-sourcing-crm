@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: crm-postgres
+    restart: unless-stopped   # survives Docker Desktop / machine restarts
+    environment:
+      POSTGRES_DB: doctutorials_crm
+      POSTGRES_USER: crm_user
+      POSTGRES_PASSWORD: crm_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - crm_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_user -d doctutorials_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Uncomment once the AI module is built (Phase 3) - matches the reference
+  # product's local Ollama + Llama 3 setup, no external API cost.
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: crm-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - crm_ollama_data:/root/.ollama
+
+  app:
+    build: .
+    container_name: crm-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CRM_DB_URL: jdbc:postgresql://postgres:5432/doctutorials_crm
+      CRM_DB_USERNAME: crm_user
+      CRM_DB_PASSWORD: crm_password
+      CRM_JWT_SECRET: ${CRM_JWT_SECRET:-change-this-to-a-long-random-secret-in-every-real-environment}
+      CRM_CORS_ALLOWED_ORIGINS: ${CRM_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      CRM_SERVER_PORT: 8080
+    ports:
+      - "8085:8080"
+
+volumes:
+  crm_pg_data:
+  # crm_ollama_data:

@@ -1,0 +1,3 @@
+
+# Local file storage (LocalFileStorageService) - never commit uploaded content
+/data/uploads/
