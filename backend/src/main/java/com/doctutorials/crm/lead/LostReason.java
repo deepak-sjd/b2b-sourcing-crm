@@ -1,0 +1,17 @@
+package com.doctutorials.crm.lead;
+
+/** Exact taxonomy from the PRD's §14.2 Lost reasons list. */
+public enum LostReason {
+    PRICE_TOO_HIGH,
+    SUPPLIER_PRICE_TOO_HIGH,
+    CUSTOMER_SELECTED_ANOTHER_SUPPLIER,
+    CUSTOMER_STOPPED_RESPONDING,
+    LATE_RESPONSE,
+    DELAY_FROM_OUR_SIDE,
+    REQUIREMENT_CANCELLED,
+    REQUIREMENT_POSTPONED,
+    REQUIREMENT_CHANGED,
+    CUSTOMER_NOT_INTERESTED,
+    INCORRECT_REQUIREMENT,
+    OTHER
+}

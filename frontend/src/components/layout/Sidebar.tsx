@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   Users2,
+  Archive,
   Contact2,
   Building2,
   Truck,
@@ -27,6 +28,7 @@ interface NavItem {
 const MAIN_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/leads", label: "Leads", icon: Users2 },
+  { to: "/leads/scrap", label: "Scrap Records", icon: Archive },
   { to: "/contacts", label: "Contacts", icon: Contact2 },
   { to: "/customers", label: "Customers", icon: Building2 },
   { to: "/requirements", label: "Requirements", icon: ClipboardList },
@@ -49,6 +51,7 @@ function NavLinkItem({ item }: { item: NavItem }) {
   return (
     <NavLink
       to={item.to}
+      end={item.to === "/leads"}
       className={({ isActive }) =>
         cn(
           "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",

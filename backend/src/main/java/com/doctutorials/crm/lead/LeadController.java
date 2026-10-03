@@ -4,6 +4,9 @@ import com.doctutorials.crm.common.ApiResponse;
 import com.doctutorials.crm.common.PageResponse;
 import com.doctutorials.crm.lead.dto.LeadRequest;
 import com.doctutorials.crm.lead.dto.LeadResponse;
+import com.doctutorials.crm.lead.dto.MarkLostRequest;
+import com.doctutorials.crm.lead.dto.MarkWonRequest;
+import com.doctutorials.crm.lead.dto.ScrapRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -70,6 +73,15 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.ok(new PageResponse<>(mapped)));
     }
 
+    /** PRD §14.3 - the Scrap Records section, kept as its own list endpoint
+     *  rather than a filter on the main one; see LeadService.listScrapped. */
+    @GetMapping("/scrap")
+    public ResponseEntity<ApiResponse<PageResponse<LeadResponse>>> listScrapped(
+            @PageableDefault(sort = { "scrappedAt", "id" }, direction = Sort.Direction.DESC) Pageable pageable) {
+        Page<LeadResponse> mapped = leadService.listScrapped(pageable).map(this::toResponse);
+        return ResponseEntity.ok(ApiResponse.ok(new PageResponse<>(mapped)));
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
     public ResponseEntity<ApiResponse<LeadResponse>> update(@PathVariable UUID id, @Valid @RequestBody LeadRequest request) {
@@ -77,11 +89,41 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.ok("Lead updated", toResponse(lead)));
     }
 
+    /** Only handles the four open-pipeline stages - see LeadService.changeStage's
+     *  javadoc for why WON/LOST are rejected here. */
     @PatchMapping("/{id}/stage")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
     public ResponseEntity<ApiResponse<LeadResponse>> changeStage(@PathVariable UUID id, @RequestParam LeadStage stage) {
         Lead lead = leadService.changeStage(id, stage);
         return ResponseEntity.ok(ApiResponse.ok("Stage updated", toResponse(lead)));
+    }
+
+    @PostMapping("/{id}/won")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
+    public ResponseEntity<ApiResponse<LeadResponse>> markWon(@PathVariable UUID id, @Valid @RequestBody MarkWonRequest request) {
+        Lead lead = leadService.markWon(id, request.finalValue(), request.remarks());
+        return ResponseEntity.ok(ApiResponse.ok("Lead marked Won", toResponse(lead)));
+    }
+
+    @PostMapping("/{id}/lost")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
+    public ResponseEntity<ApiResponse<LeadResponse>> markLost(@PathVariable UUID id, @Valid @RequestBody MarkLostRequest request) {
+        Lead lead = leadService.markLost(id, request.lostReason(), request.comment());
+        return ResponseEntity.ok(ApiResponse.ok("Lead marked Lost", toResponse(lead)));
+    }
+
+    @PostMapping("/{id}/scrap")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
+    public ResponseEntity<ApiResponse<LeadResponse>> moveToScrap(@PathVariable UUID id, @Valid @RequestBody ScrapRequest request) {
+        Lead lead = leadService.moveToScrap(id, request.scrapReason(), request.remarks());
+        return ResponseEntity.ok(ApiResponse.ok("Lead moved to Scrap", toResponse(lead)));
+    }
+
+    @PostMapping("/{id}/reactivate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
+    public ResponseEntity<ApiResponse<LeadResponse>> reactivate(@PathVariable UUID id) {
+        Lead lead = leadService.reactivate(id);
+        return ResponseEntity.ok(ApiResponse.ok("Lead reactivated", toResponse(lead)));
     }
 
     @PatchMapping("/{id}/assign")
@@ -95,13 +137,6 @@ public class LeadController {
     public ResponseEntity<ApiResponse<Void>> recordTouchpoint(@PathVariable UUID id) {
         leadService.recordTouchpoint(id);
         return ResponseEntity.ok(ApiResponse.ok("Touchpoint recorded", null));
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
-    public ResponseEntity<ApiResponse<Void>> archive(@PathVariable UUID id) {
-        leadService.archive(id);
-        return ResponseEntity.ok(ApiResponse.ok("Lead archived", null));
     }
 
     @PostMapping("/{id}/ai/refresh")

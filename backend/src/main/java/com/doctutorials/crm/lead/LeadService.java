@@ -17,6 +17,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -65,6 +66,14 @@ public class LeadService {
         return saved;
     }
 
+    /**
+     * Handles the four non-terminal stage moves (NEW/CONTACTED/QUALIFIED/OPPORTUNITY).
+     * WON and LOST are rejected here and must go through markWon/markLost instead,
+     * because the PRD requires data those two don't carry - a reason for LOST,
+     * a closedAt timestamp for both. Without this split, the old generic
+     * endpoint let a caller flip a lead straight to LOST with zero reason
+     * recorded, which is exactly the gap this feature closes.
+     */
     @Transactional
     public Lead changeStage(UUID id, LeadStage newStage) {
         Lead lead = getById(id);
@@ -72,6 +81,10 @@ public class LeadService {
 
         if (oldStage == LeadStage.WON || oldStage == LeadStage.LOST) {
             throw new BadRequestException("Cannot move a lead out of a closed stage (" + oldStage + ")");
+        }
+        if (newStage == LeadStage.WON || newStage == LeadStage.LOST) {
+            throw new BadRequestException(
+                    "Use the Mark Won / Mark Lost action to close a lead - " + newStage + " requires closure details");
         }
 
         lead.setStage(newStage);
@@ -81,6 +94,104 @@ public class LeadService {
 
         auditService.log("Lead", id, AuditAction.STAGE_CHANGE,
                 "Stage changed from " + oldStage + " to " + newStage);
+        return saved;
+    }
+
+    @Transactional
+    public Lead markWon(UUID id, BigDecimal finalValue, String remarks) {
+        Lead lead = getById(id);
+        assertOpenStage(lead);
+
+        LeadStage oldStage = lead.getStage();
+        lead.setStage(LeadStage.WON);
+        lead.setClosedAt(Instant.now());
+        lead.setFinalValue(finalValue);
+        lead.setClosureRemarks(remarks);
+        scoringService.rescore(lead);
+        aiInsightService.generate(lead);
+
+        Lead saved = leadRepository.save(lead);
+        auditService.log("Lead", id, AuditAction.STAGE_CHANGE,
+                "Marked WON (from " + oldStage + ")"
+                        + (finalValue != null ? " - final value " + finalValue : ""));
+        return saved;
+    }
+
+    @Transactional
+    public Lead markLost(UUID id, LostReason reason, String comment) {
+        Lead lead = getById(id);
+        assertOpenStage(lead);
+
+        LeadStage oldStage = lead.getStage();
+        lead.setStage(LeadStage.LOST);
+        lead.setClosedAt(Instant.now());
+        lead.setLostReason(reason);
+        lead.setLostComment(comment);
+        scoringService.rescore(lead);
+        aiInsightService.generate(lead);
+
+        Lead saved = leadRepository.save(lead);
+        auditService.log("Lead", id, AuditAction.STAGE_CHANGE,
+                "Marked LOST (from " + oldStage + ") - reason: " + reason);
+        return saved;
+    }
+
+    private void assertOpenStage(Lead lead) {
+        if (lead.getStage() == LeadStage.WON || lead.getStage() == LeadStage.LOST) {
+            throw new BadRequestException("This lead is already closed (" + lead.getStage() + ")");
+        }
+    }
+
+    /**
+     * PRD §14.3: "not suitable, do not match the requirement, are inactive,
+     * duplicate or incorrect, or are no longer worked on." WON/LOST are
+     * excluded - both are already a final outcome with their own reason
+     * trail, and scrapping on top of that would blur two different questions
+     * ("why did this not become business" vs "why was this never a real
+     * lead").
+     */
+    @Transactional
+    public Lead moveToScrap(UUID id, ScrapReason reason, String remarks) {
+        Lead lead = getById(id);
+        if (lead.isScrapped()) {
+            throw new BadRequestException("This lead is already in Scrap");
+        }
+        if (lead.getStage() == LeadStage.WON || lead.getStage() == LeadStage.LOST) {
+            throw new BadRequestException("A " + lead.getStage() + " lead already has a final outcome and can't also be scrapped");
+        }
+
+        lead.setScrapped(true);
+        lead.setScrapReason(reason);
+        lead.setScrapRemarks(remarks);
+        lead.setScrappedAt(Instant.now());
+
+        Lead saved = leadRepository.save(lead);
+        auditService.log("Lead", id, AuditAction.DELETE, "Moved to Scrap - reason: " + reason);
+        return saved;
+    }
+
+    /**
+     * PRD §14.3: "A Scrap record can be reactivated if the customer becomes
+     * relevant again." Deliberately leaves `stage` untouched - a scrapped
+     * lead's stage is frozen at whatever it was when scrapped (see
+     * moveToScrap, which never changes it), so reactivating just un-hides it
+     * back into wherever it already was in the funnel rather than resetting
+     * it to NEW and losing that progress.
+     */
+    @Transactional
+    public Lead reactivate(UUID id) {
+        Lead lead = getById(id);
+        if (!lead.isScrapped()) {
+            throw new BadRequestException("This lead is not in Scrap");
+        }
+
+        lead.setScrapped(false);
+        lead.setScrapReason(null);
+        lead.setScrapRemarks(null);
+        lead.setScrappedAt(null);
+
+        Lead saved = leadRepository.save(lead);
+        auditService.log("Lead", id, AuditAction.UPDATE, "Reactivated from Scrap");
         return saved;
     }
 
@@ -117,14 +228,6 @@ public class LeadService {
         return saved;
     }
 
-    @Transactional
-    public void archive(UUID id) {
-        Lead lead = getById(id);
-        lead.setArchived(true);
-        leadRepository.save(lead);
-        auditService.log("Lead", id, AuditAction.DELETE, "Lead archived");
-    }
-
     public Lead getById(UUID id) {
         Lead lead = leadRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Lead", id));
@@ -133,41 +236,51 @@ public class LeadService {
     }
 
     /**
-     * archive() is a soft delete - it flips the archived flag rather than
+     * notScrapped() is a soft delete - it flips the scrapped flag rather than
      * deleting the row, so audit history and attached tasks/calls/notes survive.
      * That only behaves like a delete if every list path actually filters the
      * flag out, which is what this spec is for. Previously only findAtRiskLeads
-     * filtered it, so archiving a lead appeared to do nothing: the lead stayed
-     * in the main list.
+     * filtered it, so scrapping a lead appeared to do nothing: the lead stayed
+     * in the main list. (Renamed from notArchived() alongside the
+     * archived -> scrapped column rename - see V12 migration.)
      */
-    private Specification<Lead> notArchived() {
-        return (root, query, cb) -> cb.isFalse(root.get("archived"));
+    private Specification<Lead> notScrapped() {
+        return (root, query, cb) -> cb.isFalse(root.get("scrapped"));
     }
 
     public Page<Lead> list(Pageable pageable) {
         Specification<Lead> spec = Specification.where(leadAccessService.leadVisibility())
-                .and(notArchived());
+                .and(notScrapped());
         return leadRepository.findAll(spec, pageable);
     }
 
     public Page<Lead> listByStage(LeadStage stage, Pageable pageable) {
         Specification<Lead> spec = Specification.where(leadAccessService.leadVisibility())
-                .and(notArchived())
+                .and(notScrapped())
                 .and((root, query, cb) -> cb.equal(root.get("stage"), stage));
         return leadRepository.findAll(spec, pageable);
     }
 
     public Page<Lead> listByOwner(UUID ownerId, Pageable pageable) {
         // Combining the caller's visibility scope with the requested ownerId (rather
-        // than
-        // treating ownerId as a separate permission check) means an out-of-scope query
-        // just
-        // comes back empty by construction - there's no separate "are you allowed to
-        // ask for
-        // this ownerId" branch to accidentally get wrong or forget to update later.
+        // than treating ownerId as a separate permission check) means an out-of-scope
+        // query just comes back empty by construction - there's no separate "are you
+        // allowed to ask for this ownerId" branch to accidentally get wrong or forget
+        // to update later.
         Specification<Lead> spec = Specification.where(leadAccessService.leadVisibility())
-                .and(notArchived())
+                .and(notScrapped())
                 .and((root, query, cb) -> cb.equal(root.get("owner").get("id"), ownerId));
+        return leadRepository.findAll(spec, pageable);
+    }
+
+    /** Powers the Scrap Records page (PRD §14.3: "Authorised users can search
+     *  and review Scrap records"). Deliberately the mirror image of list() -
+     *  scrapped-only instead of notScrapped() - rather than a boolean param
+     *  threaded through list(), so the "everywhere else" default stays the
+     *  one that can't accidentally leak scrapped rows into a normal view. */
+    public Page<Lead> listScrapped(Pageable pageable) {
+        Specification<Lead> spec = Specification.where(leadAccessService.leadVisibility())
+                .and((root, query, cb) -> cb.isTrue(root.get("scrapped")));
         return leadRepository.findAll(spec, pageable);
     }
 
@@ -178,7 +291,7 @@ public class LeadService {
     public List<Lead> findAtRiskLeads() {
         Instant threshold = Instant.now().minus(staleThresholdDays, ChronoUnit.DAYS);
         Specification<Lead> spec = Specification.where(leadAccessService.leadVisibility())
-                .and(notArchived())
+                .and(notScrapped())
                 .and((root, query, cb) -> cb.lessThan(root.get("lastTouchpointAt"), threshold));
         return leadRepository.findAll(spec);
     }
@@ -198,7 +311,7 @@ public class LeadService {
      */
     @Transactional
     public int refreshAllOpenLeadsForSystemJob() {
-        Specification<Lead> spec = Specification.where(notArchived())
+        Specification<Lead> spec = Specification.where(notScrapped())
                 .and((root, query, cb) -> cb.not(root.get("stage").in(List.of(LeadStage.WON, LeadStage.LOST))));
         List<Lead> openLeads = leadRepository.findAll(spec);
         for (Lead lead : openLeads) {

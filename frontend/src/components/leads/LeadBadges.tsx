@@ -1,6 +1,15 @@
 import { Dot } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LEAD_STAGE_LABELS, type LeadStage, type Priority, type BuyingIntent } from "@/types/lead";
+import {
+  LEAD_STAGE_LABELS,
+  LOST_REASON_LABELS,
+  SCRAP_REASON_LABELS,
+  type LeadStage,
+  type Priority,
+  type BuyingIntent,
+  type LostReason,
+  type ScrapReason,
+} from "@/types/lead";
 
 const STAGE_DOT_CLASS: Record<LeadStage, string> = {
   NEW: "bg-stage-new",
@@ -59,6 +68,25 @@ export function ScoreBadge({ score }: { score: number }) {
   return (
     <span className={cn("inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-semibold", color)}>
       {score}
+    </span>
+  );
+}
+
+/** PRD §14.2 - shown on a LOST lead's detail page and the Scrap/Lost-analysis
+ *  views once those exist. */
+export function LostReasonBadge({ reason }: { reason: LostReason }) {
+  return (
+    <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+      {LOST_REASON_LABELS[reason]}
+    </span>
+  );
+}
+
+/** PRD §14.3 - shown on Scrap Records rows and a scrapped lead's detail page. */
+export function ScrapReasonBadge({ reason }: { reason: ScrapReason }) {
+  return (
+    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      {SCRAP_REASON_LABELS[reason]}
     </span>
   );
 }

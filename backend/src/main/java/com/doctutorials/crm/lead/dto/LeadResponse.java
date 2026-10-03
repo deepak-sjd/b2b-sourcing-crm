@@ -3,7 +3,9 @@ package com.doctutorials.crm.lead.dto;
 import com.doctutorials.crm.lead.BuyingIntent;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.lead.LeadStage;
+import com.doctutorials.crm.lead.LostReason;
 import com.doctutorials.crm.lead.Priority;
+import com.doctutorials.crm.lead.ScrapReason;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -31,7 +33,18 @@ public record LeadResponse(
         boolean atRisk,
         String aiSummary,
         String nextBestAction,
-        Instant aiSummaryGeneratedAt
+        Instant aiSummaryGeneratedAt,
+        // Won/Lost closure (PRD §14.1/§14.2)
+        Instant closedAt,
+        BigDecimal finalValue,
+        String closureRemarks,
+        LostReason lostReason,
+        String lostComment,
+        // Scrap lifecycle (PRD §14.3)
+        boolean scrapped,
+        ScrapReason scrapReason,
+        String scrapRemarks,
+        Instant scrappedAt
 ) {
     public static LeadResponse from(Lead l, long staleThresholdDays) {
         long daysSince = l.getDaysSinceLastTouchpoint();
@@ -44,7 +57,9 @@ public record LeadResponse(
                 l.getConvertProbability(), l.getSource(),
                 l.getOwner() != null ? l.getOwner().getFullName() : null,
                 l.getLastTouchpointAt(), l.getNextFollowUpAt(), daysSince, atRisk, l.getAiSummary(),
-                l.getNextBestAction(), l.getAiSummaryGeneratedAt()
+                l.getNextBestAction(), l.getAiSummaryGeneratedAt(),
+                l.getClosedAt(), l.getFinalValue(), l.getClosureRemarks(), l.getLostReason(), l.getLostComment(),
+                l.isScrapped(), l.getScrapReason(), l.getScrapRemarks(), l.getScrappedAt()
         );
     }
 }

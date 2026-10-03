@@ -77,7 +77,46 @@ public class Lead extends BaseEntity {
     @Column(name = "next_best_action", length = 300)
     private String nextBestAction;
 
-    private boolean archived = false;
+    // --- Won/Lost closure (PRD §14.1/§14.2) ---
+    //
+    // Set together by LeadService.markWon/markLost, which are the only paths
+    // allowed to move a lead into WON or LOST — see changeStage's guard.
+
+    private Instant closedAt;
+
+    /** What the deal actually closed at, distinct from the earlier estimatedValue
+     *  guess made during the pipeline. Null unless stage is WON. */
+    private BigDecimal finalValue;
+
+    @Column(length = 1000)
+    private String closureRemarks;
+
+    @Enumerated(EnumType.STRING)
+    private LostReason lostReason;
+
+    @Column(length = 1000)
+    private String lostComment;
+
+    // --- Scrap lifecycle (PRD §14.3) ---
+    //
+    // "Scrap means archived. It does NOT mean permanently deleted." - the row
+    // stays, everything on it stays, it just drops out of the normal pipeline
+    // views (see LeadService.notScrapped()) until reactivated. This was
+    // previously a bare `archived` boolean with no reason/date/reactivate path
+    // and wasn't exposed to the frontend at all; this migration promotes it to
+    // the PRD's full Scrap concept and renames it to match that language
+    // throughout (see V8 migration).
+
+    @Column(nullable = false)
+    private boolean scrapped = false;
+
+    @Enumerated(EnumType.STRING)
+    private ScrapReason scrapReason;
+
+    @Column(length = 1000)
+    private String scrapRemarks;
+
+    private Instant scrappedAt;
 
     /**
      * Days since last touchpoint - used by the "inactive for N days, drop-off risk" banner.
