@@ -11,9 +11,9 @@ public interface MailService {
     /**
      * PRD 12.2: "Send one enquiry by email to all suppliers, or to selected
      * suppliers." One call per supplier (not one email with everyone CC'd) so
-     * a supplier never sees who else was asked, and so failure to reach one
-     * supplier never blocks the others - see SupplierEnquiryService.create.
+     * a supplier never sees who else was asked. Returns whether delivery
+     * actually succeeded - callers (SupplierEnquiryService) must record a
+     * false result as a failure, not silently treat the attempt as a send.
      */
-    void sendSupplierEnquiryEmail(String toEmail, String supplierContactName, String enquiryCode,
-            String itemDescription, String quantity, String notes);
+    boolean sendSupplierEnquiryEmail(SupplierEnquiryEmailRequest request);
 }

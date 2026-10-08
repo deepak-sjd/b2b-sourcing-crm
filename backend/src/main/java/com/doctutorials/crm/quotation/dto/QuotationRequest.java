@@ -10,7 +10,12 @@ import java.util.List;
 import java.util.UUID;
 
 public record QuotationRequest(
-        @NotNull UUID customerId,
+        /** Exactly one of customerId/leadId must be given — QuotationService.create
+         *  enforces this (matches the DB CHECK constraint from V16). */
+        UUID customerId,
+        UUID leadId,
+        /** Optional - which of the lead's requirements this quotation answers. */
+        UUID requirementId,
         UUID customerContactId,
         LocalDate quotationDate,
         LocalDate validUntil,

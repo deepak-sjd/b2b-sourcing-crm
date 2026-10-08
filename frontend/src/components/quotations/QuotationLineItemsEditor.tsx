@@ -1,7 +1,8 @@
-import { Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect, type SearchSelectOption } from "@/components/common/SearchSelect";
+import { cn } from "@/lib/utils";
 
 export interface LineItemForm {
   clientId: string;
@@ -13,6 +14,16 @@ export interface LineItemForm {
   supplierId: string | null;
   supplierPrice: string;
   sellingPrice: string;
+  /** Set when this line's supplier/price came from "Start from requirement" — see
+   *  QuotationBuilderPage.applyPrefill. Locks supplier + supplierPrice to that chosen
+   *  reply (the server ignores anything typed there for a line with enquiryReplyId set
+   *  anyway — see QuotationService.applyLineItemPricing — so editing them here would
+   *  just be misleading). */
+  enquiryReplyId: string | null;
+  supplierName: string | null;
+  supplierReference: string | null;
+  enquiryCode: string | null;
+  replyValidUntil: string | null;
 }
 
 export function emptyLineItem(): LineItemForm {
@@ -25,6 +36,11 @@ export function emptyLineItem(): LineItemForm {
     supplierId: null,
     supplierPrice: "",
     sellingPrice: "",
+    enquiryReplyId: null,
+    supplierName: null,
+    supplierReference: null,
+    enquiryCode: null,
+    replyValidUntil: null,
   };
 }
 
@@ -44,6 +60,10 @@ function marginPercent(item: LineItemForm): number | null {
   return (margin / total) * 100;
 }
 
+function replyExpired(item: LineItemForm, today: string): boolean {
+  return !!item.replyValidUntil && item.replyValidUntil < today;
+}
+
 interface QuotationLineItemsEditorProps {
   items: LineItemForm[];
   onChange: (items: LineItemForm[]) => void;
@@ -59,6 +79,8 @@ export function QuotationLineItemsEditor({
   currency,
   errors = {},
 }: QuotationLineItemsEditorProps) {
+  const today = new Date().toISOString().slice(0, 10);
+
   function update(clientId: string, patch: Partial<LineItemForm>) {
     onChange(items.map((i) => (i.clientId === clientId ? { ...i, ...patch } : i)));
   }
@@ -69,6 +91,16 @@ export function QuotationLineItemsEditor({
 
   function add() {
     onChange([...items, emptyLineItem()]);
+  }
+
+  function clearPriceSource(clientId: string) {
+    update(clientId, {
+      enquiryReplyId: null,
+      supplierName: null,
+      supplierReference: null,
+      enquiryCode: null,
+      replyValidUntil: null,
+    });
   }
 
   return (
@@ -90,6 +122,12 @@ export function QuotationLineItemsEditor({
           <tbody>
             {items.map((item, idx) => {
               const margin = marginPercent(item);
+              const negativeMargin = margin !== null && margin < 0;
+              const underSupplierPrice =
+                item.supplierPrice.trim() !== "" && Number(item.sellingPrice) < Number(item.supplierPrice);
+              const expired = replyExpired(item, today);
+              const fromReply = !!item.enquiryReplyId;
+
               return (
                 <tr key={item.clientId} className="border-t border-border align-top">
                   <td className="px-2 py-2">
@@ -121,12 +159,40 @@ export function QuotationLineItemsEditor({
                     <Input value={item.unit} onChange={(e) => update(item.clientId, { unit: e.target.value })} />
                   </td>
                   <td className="px-2 py-2">
-                    <SearchSelect
-                      options={supplierOptions}
-                      value={item.supplierId}
-                      onChange={(v) => update(item.clientId, { supplierId: v })}
-                      placeholder="None"
-                    />
+                    {fromReply ? (
+                      <div className="rounded-md border border-dashed border-border bg-muted/40 p-1.5 text-xs">
+                        <div className="flex items-start justify-between gap-1">
+                          <div>
+                            <p className="font-medium">{item.supplierName}</p>
+                            <p className="text-muted-foreground">
+                              {item.enquiryCode}
+                              {item.supplierReference ? ` · ref ${item.supplierReference}` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            title="Unlock and pick a different supplier"
+                            onClick={() => clearPriceSource(item.clientId)}
+                            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        {expired && (
+                          <p className="mt-1 flex items-center gap-1 text-amber-700">
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            Price expired {item.replyValidUntil}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <SearchSelect
+                        options={supplierOptions}
+                        value={item.supplierId}
+                        onChange={(v) => update(item.clientId, { supplierId: v })}
+                        placeholder="None"
+                      />
+                    )}
                   </td>
                   <td className="px-2 py-2">
                     <Input
@@ -135,6 +201,7 @@ export function QuotationLineItemsEditor({
                       step="0.01"
                       className="text-right"
                       value={item.supplierPrice}
+                      disabled={fromReply}
                       onChange={(e) => update(item.clientId, { supplierPrice: e.target.value })}
                     />
                   </td>
@@ -143,7 +210,7 @@ export function QuotationLineItemsEditor({
                       type="number"
                       min="0"
                       step="0.01"
-                      className="text-right"
+                      className={cn("text-right", (negativeMargin || underSupplierPrice) && "border-amber-400")}
                       value={item.sellingPrice}
                       onChange={(e) => update(item.clientId, { sellingPrice: e.target.value })}
                     />
@@ -158,7 +225,8 @@ export function QuotationLineItemsEditor({
                       {currency} {lineTotal(item).toFixed(2)}
                     </p>
                     {margin !== null && (
-                      <p className={margin >= 0 ? "text-xs text-emerald-700" : "text-xs text-destructive"}>
+                      <p className={negativeMargin ? "text-xs font-medium text-amber-700" : "text-xs text-emerald-700"}>
+                        {negativeMargin && <AlertTriangle className="mr-0.5 inline h-3 w-3" />}
                         {margin.toFixed(1)}% margin
                       </p>
                     )}

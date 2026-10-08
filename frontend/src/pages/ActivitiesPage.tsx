@@ -6,13 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Pagination } from "@/components/common/Pagination";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { activitiesApi } from "@/api/activities";
 import { formatDate } from "@/lib/utils";
 import {
-  ACTIVITY_TYPES, ACTIVITY_TYPE_LABELS, ACTIVITY_STATUSES,
-  type Activity, type ActivityType, type ActivityStatus,
+  ACTIVITY_TYPES, ACTIVITY_TYPE_LABELS, ACTIVITY_STATUSES, CALL_OUTCOMES, CALL_OUTCOME_LABELS,
+  MEETING_STATUSES, MEETING_STATUS_LABELS,
+  type Activity, type ActivityType, type ActivityStatus, type CallOutcome, type MeetingStatus,
 } from "@/types/activity";
 
 const PAGE_SIZE = 20;
@@ -68,6 +70,9 @@ export function ActivitiesPage() {
   const [page, setPage] = useState(0);
   const [type, setType] = useState<ActivityType | "ALL">("ALL");
   const [status, setStatus] = useState<ActivityStatus | "ALL">("ALL");
+  const [callOutcome, setCallOutcome] = useState<CallOutcome | "ALL">("ALL");
+  const [meetingStatus, setMeetingStatus] = useState<MeetingStatus | "ALL">("ALL");
+  const [fromDate, setFromDate] = useState("");
 
   const summaryQuery = useQuery({ queryKey: ["activities", "summary"], queryFn: activitiesApi.summary });
 
@@ -83,6 +88,16 @@ export function ActivitiesPage() {
         type: type === "ALL" ? undefined : type,
         status: status === "ALL" ? undefined : status,
       }),
+  });
+
+  // callOutcome/meetingStatus/fromDate are filtered client-side on this page
+  // (backend list() doesn't take them as params - only type/status do) since
+  // they only ever narrow an already-small, already-paged result set here.
+  const visibleActivities = (activitiesQuery.data?.content ?? []).filter((a) => {
+    if (callOutcome !== "ALL" && a.callOutcome !== callOutcome) return false;
+    if (meetingStatus !== "ALL" && a.meetingStatus !== meetingStatus) return false;
+    if (fromDate && new Date(a.scheduledAt).getTime() < new Date(fromDate).getTime()) return false;
+    return true;
   });
 
   return (
@@ -126,13 +141,32 @@ export function ActivitiesPage() {
               {ACTIVITY_STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replaceAll("_", " ")}</SelectItem>)}
             </SelectContent>
           </Select>
+          {type === "CALL" && (
+            <Select value={callOutcome} onValueChange={(v) => setCallOutcome(v as CallOutcome | "ALL")}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Outcome" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All outcomes</SelectItem>
+                {CALL_OUTCOMES.map((o) => <SelectItem key={o} value={o}>{CALL_OUTCOME_LABELS[o]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {type === "MEETING" && (
+            <Select value={meetingStatus} onValueChange={(v) => setMeetingStatus(v as MeetingStatus | "ALL")}>
+              <SelectTrigger className="w-44"><SelectValue placeholder="Meeting status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All meeting statuses</SelectItem>
+                {MEETING_STATUSES.map((s) => <SelectItem key={s} value={s}>{MEETING_STATUS_LABELS[s]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <Input type="date" className="w-40" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
         </div>
 
         {activitiesQuery.isLoading ? (
           <div className="space-y-2 p-4">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
-        ) : activitiesQuery.data && activitiesQuery.data.content.length > 0 ? (
+        ) : visibleActivities.length > 0 ? (
           <>
             <Table>
               <TableHeader>
@@ -146,7 +180,7 @@ export function ActivitiesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activitiesQuery.data.content.map((a) => {
+                {visibleActivities.map((a) => {
                   const Icon = TYPE_ICON[a.activityType];
                   const overdue = a.followUpAt && new Date(a.followUpAt).getTime() < Date.now();
                   return (
@@ -174,9 +208,9 @@ export function ActivitiesPage() {
               </TableBody>
             </Table>
             <Pagination
-              page={activitiesQuery.data.page}
-              totalPages={activitiesQuery.data.totalPages}
-              totalElements={activitiesQuery.data.totalElements}
+              page={activitiesQuery.data?.page ?? 0}
+              totalPages={activitiesQuery.data?.totalPages ?? 1}
+              totalElements={activitiesQuery.data?.totalElements ?? 0}
               onPageChange={setPage}
             />
           </>

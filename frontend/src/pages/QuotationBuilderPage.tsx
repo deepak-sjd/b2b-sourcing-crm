@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, PartyPopper, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,10 +20,12 @@ import {
 import { quotationsApi } from "@/api/quotations";
 import { customersApi } from "@/api/customers";
 import { suppliersApi } from "@/api/suppliers";
+import { requirementsApi } from "@/api/requirements";
+import { leadsApi } from "@/api/leads";
 import { extractErrorMessage } from "@/api/client";
 import {
   QUOTATION_LOCKED_STATUSES,
-  QUOTATION_STATUSES,
+  QUOTATION_NEXT_STATUSES,
   QUOTATION_STATUS_LABELS,
   type QuotationRequest,
   type QuotationStatus,
@@ -36,7 +38,13 @@ export function QuotationBuilderPage() {
   const queryClient = useQueryClient();
   const isEdit = !!quotationId;
 
+  // A quotation targets EITHER a customer or a lead. On create, which one is fixed by
+  // which query param opened the builder (CustomerQuotationsTab passes ?customerId=,
+  // LeadQuotationsTab passes ?leadId=); on edit, it's whatever the loaded quotation has.
   const [customerId, setCustomerId] = useState<string | null>(searchParams.get("customerId"));
+  const [leadId, setLeadId] = useState<string | null>(searchParams.get("leadId"));
+  const [requirementId, setRequirementId] = useState<string | null>(null);
+  const [requirementPickerId, setRequirementPickerId] = useState<string | null>(null);
   const [customerContactId, setCustomerContactId] = useState<string | null>(null);
   const [quotationDate, setQuotationDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [validUntil, setValidUntil] = useState("");
@@ -47,10 +55,14 @@ export function QuotationBuilderPage() {
   const [lineItems, setLineItems] = useState<LineItemForm[]>([emptyLineItem()]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [prefilling, setPrefilling] = useState(false);
+
+  const isLeadTarget = !!leadId;
 
   const customersQuery = useQuery({
     queryKey: ["customers", "for-quotation-picker"],
     queryFn: () => customersApi.list({ size: 500 }),
+    enabled: !isLeadTarget,
   });
   const suppliersQuery = useQuery({
     queryKey: ["suppliers", "for-quotation-picker"],
@@ -61,11 +73,24 @@ export function QuotationBuilderPage() {
     queryFn: () => quotationsApi.getById(quotationId!),
     enabled: isEdit,
   });
+  // Only needed on CREATE from a lead — once a quotation exists, its own leadName covers this.
+  const leadQuery = useQuery({
+    queryKey: ["lead", leadId],
+    queryFn: () => leadsApi.getById(leadId!),
+    enabled: isLeadTarget && !isEdit,
+  });
+  const requirementsQuery = useQuery({
+    queryKey: ["requirements", "by-lead", leadId],
+    queryFn: () => requirementsApi.byLead(leadId!, 0, 100),
+    enabled: isLeadTarget,
+  });
 
   useEffect(() => {
     const q = quotationQuery.data;
     if (!q) return;
     setCustomerId(q.customerId);
+    setLeadId(q.leadId);
+    setRequirementId(q.requirementId);
     setCustomerContactId(q.customerContactId);
     setQuotationDate(q.quotationDate);
     setValidUntil(q.validUntil ?? "");
@@ -84,12 +109,18 @@ export function QuotationBuilderPage() {
         supplierId: li.supplierId,
         supplierPrice: li.supplierPrice != null ? String(li.supplierPrice) : "",
         sellingPrice: String(li.sellingPrice),
+        enquiryReplyId: li.enquiryReplyId,
+        supplierName: li.supplierName,
+        supplierReference: li.supplierReference,
+        enquiryCode: li.enquiryCode,
+        replyValidUntil: null, // only known at prefill time; an already-saved line just shows the trail above
       })),
     );
   }, [quotationQuery.data]);
 
   const customers = customersQuery.data?.content ?? [];
   const suppliers = suppliersQuery.data?.content ?? [];
+  const requirements = requirementsQuery.data?.content ?? [];
 
   const customerOptions: SearchSelectOption[] = customers.map((c) => ({
     value: c.id,
@@ -100,6 +131,11 @@ export function QuotationBuilderPage() {
     value: s.id,
     label: s.companyName,
     sublabel: s.supplierCode,
+  }));
+  const requirementOptions: SearchSelectOption[] = requirements.map((r) => ({
+    value: r.id,
+    label: r.productName,
+    sublabel: r.quantity != null ? `${r.quantity} ${r.unit ?? ""}`.trim() : r.status,
   }));
 
   const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
@@ -134,7 +170,11 @@ export function QuotationBuilderPage() {
     return { subtotal, tax, grandTotal: subtotal + tax, margin };
   }, [lineItems, taxPercent]);
 
+  const today = new Date().toISOString().slice(0, 10);
+  const validityExpired = !!validUntil && validUntil < today;
+
   const locked = isEdit && quotationQuery.data ? QUOTATION_LOCKED_STATUSES.includes(quotationQuery.data.status) : false;
+  const nextStatuses = quotationQuery.data ? QUOTATION_NEXT_STATUSES[quotationQuery.data.status] : [];
 
   const statusMutation = useMutation({
     mutationFn: (status: QuotationStatus) => quotationsApi.changeStatus(quotationId!, status),
@@ -146,9 +186,53 @@ export function QuotationBuilderPage() {
     onError: (error) => toast.error(extractErrorMessage(error, "Couldn't change status")),
   });
 
+  async function handlePrefill() {
+    if (!requirementPickerId) return;
+    setPrefilling(true);
+    try {
+      const result = await quotationsApi.prefill(requirementPickerId);
+      setRequirementId(requirementPickerId);
+
+      const newLine: LineItemForm = {
+        ...emptyLineItem(),
+        productName: result.productName,
+        quantity: String(result.quantity),
+        unit: result.unit || "Nos",
+        supplierId: result.supplierId,
+        supplierPrice: String(result.supplierPrice),
+        enquiryReplyId: result.enquiryReplyId,
+        supplierName: result.supplierName,
+        supplierReference: result.supplierReference,
+        enquiryCode: result.enquiryCode,
+        replyValidUntil: result.replyValidUntil,
+      };
+
+      setLineItems((prev) => {
+        const isPristineFirstLine =
+          prev.length === 1 && !prev[0].productName.trim() && !prev[0].sellingPrice.trim() && !prev[0].supplierId;
+        return isPristineFirstLine ? [newLine] : [...prev, newLine];
+      });
+
+      if (!validUntil && result.replyValidUntil) {
+        setValidUntil(result.replyValidUntil);
+      }
+      if (lineItems.length === 1 && !lineItems[0].productName.trim()) {
+        setCurrency(result.currency);
+      } else if (result.currency !== currency) {
+        toast.warning(`This line is priced in ${result.currency}, the quotation is in ${currency} — check before sending.`);
+      }
+
+      toast.success("Line added from the chosen supplier price");
+    } catch (error) {
+      toast.error(extractErrorMessage(error, "Couldn't load a price for that requirement"));
+    } finally {
+      setPrefilling(false);
+    }
+  }
+
   function validate(): boolean {
     const nextErrors: Record<string, string> = {};
-    if (!customerId) nextErrors.customerId = "Pick a customer";
+    if (!customerId && !leadId) nextErrors.customerId = "Pick a customer or a lead";
     lineItems.forEach((item, idx) => {
       if (!item.productName.trim()) nextErrors[`lineItems.${idx}.productName`] = "Required";
       if (item.sellingPrice.trim() === "" || Number(item.sellingPrice) < 0) {
@@ -166,7 +250,9 @@ export function QuotationBuilderPage() {
     }
 
     const payload: QuotationRequest = {
-      customerId: customerId!,
+      customerId: customerId || null,
+      leadId: leadId || null,
+      requirementId: requirementId || null,
       customerContactId: customerContactId || null,
       quotationDate: quotationDate || null,
       validUntil: validUntil || null,
@@ -183,6 +269,7 @@ export function QuotationBuilderPage() {
         supplierId: item.supplierId,
         supplierPrice: item.supplierPrice.trim() !== "" ? Number(item.supplierPrice) : null,
         sellingPrice: Number(item.sellingPrice) || 0,
+        enquiryReplyId: item.enquiryReplyId,
       })),
     };
 
@@ -209,6 +296,9 @@ export function QuotationBuilderPage() {
     );
   }
 
+  const leadName = quotationQuery.data?.leadName ?? leadQuery.data?.fullName ?? null;
+  const linkedCustomerName = isLeadTarget ? quotationQuery.data?.customerName ?? null : null;
+
   return (
     <div>
       <Button
@@ -234,22 +324,45 @@ export function QuotationBuilderPage() {
         </div>
 
         {isEdit && quotationQuery.data && (
-          <Select value={quotationQuery.data.status} onValueChange={(v) => statusMutation.mutate(v as QuotationStatus)}>
-            <SelectTrigger className="w-44">
-              <SelectValue>
-                <QuotationStatusBadge status={quotationQuery.data.status} />
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {QUOTATION_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {QUOTATION_STATUS_LABELS[s]}
+          nextStatuses.length > 0 ? (
+            <Select value={quotationQuery.data.status} onValueChange={(v) => statusMutation.mutate(v as QuotationStatus)}>
+              <SelectTrigger className="w-44">
+                <SelectValue>
+                  <QuotationStatusBadge status={quotationQuery.data.status} />
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={quotationQuery.data.status} disabled>
+                  {QUOTATION_STATUS_LABELS[quotationQuery.data.status]} (current)
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {nextStatuses.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {QUOTATION_STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <QuotationStatusBadge status={quotationQuery.data.status} />
+          )
         )}
       </div>
+
+      {quotationQuery.data?.canMarkLeadWon && (
+        <Card className="mb-5 border-emerald-200 bg-emerald-50">
+          <CardContent className="flex items-center justify-between gap-3 p-4 text-sm text-emerald-800">
+            <span className="flex items-center gap-2">
+              <PartyPopper className="h-4 w-4 shrink-0" />
+              Customer accepted — mark the lead as Won to close it out.
+            </span>
+            {quotationQuery.data.leadId && (
+              <Button asChild size="sm" variant="outline" className="shrink-0 border-emerald-300">
+                <Link to={`/leads/${quotationQuery.data.leadId}`}>Open lead</Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {locked && (
         <Card className="mb-5 border-amber-200 bg-amber-50">
@@ -265,24 +378,36 @@ export function QuotationBuilderPage() {
 
       <Card className="mb-4">
         <CardContent className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Customer</Label>
-            <SearchSelect
-              options={customerOptions}
-              value={customerId}
-              onChange={setCustomerId}
-              placeholder="Search customers…"
-              disabled={locked || isEdit}
-            />
-            {errors.customerId && <p className="text-xs text-destructive">{errors.customerId}</p>}
-          </div>
+          {isLeadTarget ? (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Lead</Label>
+              <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm">
+                {leadName ?? "…"}
+              </div>
+              {linkedCustomerName && (
+                <p className="text-xs text-muted-foreground">Also linked to customer: {linkedCustomerName}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Customer</Label>
+              <SearchSelect
+                options={customerOptions}
+                value={customerId}
+                onChange={setCustomerId}
+                placeholder="Search customers…"
+                disabled={locked || isEdit}
+              />
+              {errors.customerId && <p className="text-xs text-destructive">{errors.customerId}</p>}
+            </div>
+          )}
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Attention (contact)</Label>
             <SearchSelect
               options={contactOptions}
               value={customerContactId}
               onChange={setCustomerContactId}
-              placeholder={selectedCustomer ? "Optional" : "Pick a customer first"}
+              placeholder={selectedCustomer ? "Optional" : isLeadTarget ? "No customer yet" : "Pick a customer first"}
               disabled={locked || !selectedCustomer}
             />
           </div>
@@ -305,6 +430,12 @@ export function QuotationBuilderPage() {
               disabled={locked}
               onChange={(e) => setValidUntil(e.target.value)}
             />
+            {validityExpired && (
+              <p className="flex items-center gap-1 text-xs text-amber-700">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                This date has already passed.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="currency">Currency</Label>
@@ -325,6 +456,26 @@ export function QuotationBuilderPage() {
           </div>
         </CardContent>
       </Card>
+
+      {isLeadTarget && !locked && (
+        <Card className="mb-4">
+          <CardContent className="flex flex-wrap items-end gap-2 p-4">
+            <div className="min-w-[240px] flex-1 space-y-1.5">
+              <Label>Start from requirement</Label>
+              <SearchSelect
+                options={requirementOptions}
+                value={requirementPickerId}
+                onChange={setRequirementPickerId}
+                placeholder={requirements.length === 0 ? "This lead has no requirements yet" : "Pick a requirement…"}
+                disabled={requirements.length === 0}
+              />
+            </div>
+            <Button type="button" variant="secondary" disabled={!requirementPickerId || prefilling} onClick={handlePrefill}>
+              {prefilling ? "Loading…" : "Load chosen price"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mb-4">
         <CardContent className="p-5">
@@ -348,7 +499,15 @@ export function QuotationBuilderPage() {
                       <td className="px-3 py-2">
                         {li.quantity} {li.unit}
                       </td>
-                      <td className="px-3 py-2">{li.supplierName ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        {li.supplierName ?? "—"}
+                        {li.enquiryReplyId && (
+                          <span className="block text-xs text-muted-foreground">
+                            {li.enquiryCode}
+                            {li.supplierReference ? ` · ref ${li.supplierReference}` : ""}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right">{li.sellingPrice.toFixed(2)}</td>
                       <td className="px-3 py-2 text-right font-medium">{li.lineTotal.toFixed(2)}</td>
                     </tr>
@@ -418,7 +577,7 @@ export function QuotationBuilderPage() {
             </div>
             <div className="flex justify-between pt-1 text-xs text-muted-foreground">
               <span>Estimated margin</span>
-              <span className="tabular-nums">
+              <span className={totals.margin < 0 ? "tabular-nums font-medium text-amber-700" : "tabular-nums"}>
                 {currency} {totals.margin.toFixed(2)}
               </span>
             </div>

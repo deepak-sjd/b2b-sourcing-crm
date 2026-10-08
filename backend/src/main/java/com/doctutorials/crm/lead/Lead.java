@@ -9,6 +9,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "leads", indexes = {
@@ -77,6 +78,13 @@ public class Lead extends BaseEntity {
     @Column(name = "next_best_action", length = 300)
     private String nextBestAction;
 
+    /** Set once this lead is converted into a Customer (see LeadConversionService
+     *  in the "customer" package). Deliberately NOT a @JoinColumn/@ManyToOne to
+     *  Customer - same independent-aggregates reasoning as Customer's own
+     *  convertedFromLeadId field. Null until converted. */
+    @Column(name = "converted_to_customer_id")
+    private UUID convertedToCustomerId;
+
     // --- Won/Lost closure (PRD §14.1/§14.2) ---
     //
     // Set together by LeadService.markWon/markLost, which are the only paths
@@ -96,6 +104,9 @@ public class Lead extends BaseEntity {
 
     @Column(length = 1000)
     private String lostComment;
+
+
+    
 
     // --- Scrap lifecycle (PRD §14.3) ---
     //

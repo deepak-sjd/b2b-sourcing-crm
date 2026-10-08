@@ -18,8 +18,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { SupplierEnquiryReplyDialog } from "@/components/suppliers/SupplierEnquiryReplyDialog";
+import { SearchSelect, type SearchSelectOption } from "@/components/common/SearchSelect";
 import { supplierEnquiriesApi } from "@/api/supplierEnquiries";
 import { suppliersApi } from "@/api/suppliers";
+import { requirementsApi } from "@/api/requirements";
 import { extractErrorMessage } from "@/api/client";
 import { cn, formatDate } from "@/lib/utils";
 import { SUPPLIER_REPLY_STATUS_LABELS, type SupplierEnquiryReplyResponse } from "@/types/supplierEnquiry";
@@ -35,6 +37,7 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
   const [itemDescription, setItemDescription] = useState("");
   const [quantity, setQuantity] = useState("");
   const [notes, setNotes] = useState("");
+  const [requirementId, setRequirementId] = useState<string | null>(null);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
 
   // Suppliers are org-wide master data (see Supplier.java's class comment) — a
@@ -44,11 +47,24 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
     queryFn: () => suppliersApi.list({ size: 100 }),
     enabled: open,
   });
+  // Optional - lets this enquiry's chosen reply later be found by
+  // QuotationService.prefill instead of just living as a free-text item.
+  const requirementsQuery = useQuery({
+    queryKey: ["requirements", "by-lead", leadId],
+    queryFn: () => requirementsApi.byLead(leadId, 0, 100),
+    enabled: open,
+  });
+  const requirementOptions: SearchSelectOption[] = (requirementsQuery.data?.content ?? []).map((r) => ({
+    value: r.id,
+    label: r.productName,
+    sublabel: r.quantity != null ? `${r.quantity} ${r.unit ?? ""}`.trim() : r.status,
+  }));
 
   const create = useMutation({
     mutationFn: () =>
       supplierEnquiriesApi.create({
         leadId,
+        requirementId,
         itemDescription: itemDescription.trim(),
         quantity: quantity.trim() || null,
         notes: notes.trim() || null,
@@ -60,11 +76,23 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
       setItemDescription("");
       setQuantity("");
       setNotes("");
+      setRequirementId(null);
       setSelectedSupplierIds([]);
       onOpenChange(false);
     },
     onError: (error) => toast.error(extractErrorMessage(error, "Couldn't send this enquiry")),
   });
+
+  function applyRequirement(id: string | null) {
+    setRequirementId(id);
+    const requirement = requirementsQuery.data?.content.find((r) => r.id === id);
+    if (requirement && !itemDescription.trim()) {
+      setItemDescription(requirement.productName);
+      if (requirement.quantity != null) {
+        setQuantity(`${requirement.quantity} ${requirement.unit ?? ""}`.trim());
+      }
+    }
+  }
 
   function toggleSupplier(id: string) {
     setSelectedSupplierIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -94,6 +122,16 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
           }}
           className="space-y-3"
         >
+          <div className="space-y-1.5">
+            <Label>Link to a requirement (optional)</Label>
+            <SearchSelect
+              options={requirementOptions}
+              value={requirementId}
+              onChange={applyRequirement}
+              placeholder={requirementOptions.length === 0 ? "This lead has no requirements yet" : "None"}
+              disabled={requirementOptions.length === 0}
+            />
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="enq-item">Item / requirement</Label>
             <Input

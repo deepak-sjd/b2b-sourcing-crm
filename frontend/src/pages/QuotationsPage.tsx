@@ -113,7 +113,7 @@ export function QuotationsPage() {
           <div className="relative w-full max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search number or customer…"
+              placeholder="Search number, customer or lead…"
               className="pl-8"
               value={search}
               onChange={(e) => {
@@ -167,7 +167,7 @@ export function QuotationsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Quotation</TableHead>
-                  <TableHead>Customer</TableHead>
+                  <TableHead>Customer / lead</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Grand total</TableHead>
@@ -185,7 +185,10 @@ export function QuotationsPage() {
                       <p className="font-medium">{q.quotationNumber}</p>
                       <p className="text-xs text-muted-foreground">{q.lineItems.length} item(s)</p>
                     </TableCell>
-                    <TableCell>{q.customerName}</TableCell>
+                    <TableCell>
+                      {q.displayName}
+                      {!q.customerId && <span className="ml-1.5 text-xs text-muted-foreground">(lead)</span>}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{q.quotationDate}</TableCell>
                     <TableCell>
                       <QuotationStatusBadge status={q.status} />

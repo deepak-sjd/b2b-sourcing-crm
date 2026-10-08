@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -48,12 +50,14 @@ public class CustomerService {
     @Transactional
     public Customer update(UUID id, CustomerRequest req) {
         Customer customer = getById(id);
+        Map<String, Object> before = snapshotForUpdate(customer);
         applyRequest(customer, req);
         customer.setAiHealthSummary(insightService.generateHealthSummary(customer));
         customer.setAiHealthGeneratedAt(Instant.now());
 
         Customer saved = customerRepository.save(customer);
-        auditService.log("Customer", saved.getId(), AuditAction.UPDATE, "Customer details updated");
+        auditService.logChange("Customer", saved.getId(), AuditAction.UPDATE, "Customer details updated",
+                before, snapshotForUpdate(saved));
         return saved;
     }
 
@@ -65,8 +69,9 @@ public class CustomerService {
         customer.setAiHealthSummary(insightService.generateHealthSummary(customer));
 
         Customer saved = customerRepository.save(customer);
-        auditService.log("Customer", id, AuditAction.STATUS_CHANGE,
-                "Approval status changed from " + old + " to " + status);
+        auditService.logChange("Customer", id, AuditAction.STATUS_CHANGE,
+                "Approval status changed from " + old + " to " + status,
+                Map.of("approvalStatus", old), Map.of("approvalStatus", status));
         return saved;
     }
 
@@ -76,10 +81,14 @@ public class CustomerService {
         User manager = userRepository.findById(accountManagerId)
                 .orElseThrow(() -> ResourceNotFoundException.of("User", accountManagerId));
         customerAccessService.assertCanAssignAccountManager(currentUserService.get(), manager);
+        User previous = customer.getAccountManager();
         customer.setAccountManager(manager);
 
         Customer saved = customerRepository.save(customer);
-        auditService.log("Customer", id, AuditAction.UPDATE, "Account manager reassigned to " + manager.getFullName());
+        auditService.logChange("Customer", id, AuditAction.UPDATE, "Account manager reassigned to " + manager.getFullName(),
+                mapOf("accountManagerId", previous != null ? previous.getId() : null,
+                        "accountManagerName", previous != null ? previous.getFullName() : null),
+                mapOf("accountManagerId", manager.getId(), "accountManagerName", manager.getFullName()));
         return saved;
     }
 
@@ -203,5 +212,19 @@ public class CustomerService {
 
     private String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
+    }
+
+    // Top-level scalar fields only - nested address lines are intentionally
+    // out of scope here, same call as LeadService.snapshotForUpdate.
+    private Map<String, Object> snapshotForUpdate(Customer customer) {
+        return mapOf("companyName", customer.getCompanyName(), "gstNo", customer.getGstNo(),
+                "natureOfBusiness", customer.getNatureOfBusiness(),
+                "shippingSameAsBilling", customer.isShippingSameAsBilling());
+    }
+
+    private static Map<String, Object> mapOf(Object... kv) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) map.put((String) kv[i], kv[i + 1]);
+        return map;
     }
 }

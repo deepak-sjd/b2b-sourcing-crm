@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -47,12 +49,16 @@ public class SupplierService {
     @Transactional
     public Supplier update(UUID id, SupplierRequest req) {
         Supplier supplier = getById(id);
+        Map<String, Object> before = snapshotForUpdate(supplier);
         applyRequest(supplier, req);
         assertNoBlockingDuplicate(req, id);
 
         scoringService.rescore(supplier);
         Supplier saved = supplierRepository.save(supplier);
-        auditService.log("Supplier", saved.getId(), AuditAction.UPDATE, "Supplier details updated");
+        // accountNumber in the snapshot is masked automatically by
+        // AuditService.logChange (key-name match), not here.
+        auditService.logChange("Supplier", saved.getId(), AuditAction.UPDATE, "Supplier details updated",
+                before, snapshotForUpdate(saved));
         return saved;
     }
 
@@ -62,8 +68,9 @@ public class SupplierService {
         SupplierStatus old = supplier.getStatus();
         supplier.setStatus(newStatus);
         Supplier saved = supplierRepository.save(supplier);
-        auditService.log("Supplier", id, AuditAction.STATUS_CHANGE,
-                "Status changed from " + old + " to " + newStatus);
+        auditService.logChange("Supplier", id, AuditAction.STATUS_CHANGE,
+                "Status changed from " + old + " to " + newStatus,
+                Map.of("status", old), Map.of("status", newStatus));
         return saved;
     }
 
@@ -187,6 +194,37 @@ public class SupplierService {
 
         supplier.setPaymentTerms(req.paymentTerms());
         supplier.setProducts(req.products() != null ? new ArrayList<>(req.products()) : new ArrayList<>());
+    }
+
+    /**
+     * Snapshot of the fields an update can change, used for the audit
+     * before/after diff. Uses LinkedHashMap because Map.of() rejects null
+     * values, which many of these fields legitimately have.
+     */
+    private Map<String, Object> snapshotForUpdate(Supplier s) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("companyName", s.getCompanyName());
+        map.put("category", s.getCategory());
+        map.put("gstNumber", s.getGstNumber());
+        map.put("panNumber", s.getPanNumber());
+        map.put("addressLine1", s.getAddressLine1());
+        map.put("addressLine2", s.getAddressLine2());
+        map.put("country", s.getCountry());
+        map.put("state", s.getState());
+        map.put("city", s.getCity());
+        map.put("pincode", s.getPincode());
+        map.put("bankName", s.getBankName());
+        map.put("bankAddress", s.getBankAddress());
+        map.put("accountHolderName", s.getAccountHolderName());
+        map.put("accountNumber", s.getAccountNumber());
+        map.put("ifscCode", s.getIfscCode());
+        map.put("contactName", s.getContactName());
+        map.put("contactDesignation", s.getContactDesignation());
+        map.put("contactEmail", s.getContactEmail());
+        map.put("contactPhone", s.getContactPhone());
+        map.put("paymentTerms", s.getPaymentTerms());
+        map.put("products", s.getProducts() != null ? new ArrayList<>(s.getProducts()) : null);
+        return map;
     }
 
     /** SUP-0001 style code, based on total row count so far - simple, readable, and unique enough for

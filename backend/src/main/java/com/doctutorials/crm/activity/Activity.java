@@ -23,7 +23,9 @@ import java.time.Instant;
         @Index(name = "idx_activities_status", columnList = "status"),
         @Index(name = "idx_activities_direction", columnList = "direction"),
         @Index(name = "idx_activities_type", columnList = "activityType"),
-        @Index(name = "idx_activities_follow_up_at", columnList = "followUpAt")
+        @Index(name = "idx_activities_follow_up_at", columnList = "followUpAt"),
+        @Index(name = "idx_activities_call_outcome", columnList = "callOutcome"),
+        @Index(name = "idx_activities_meeting_status", columnList = "meetingStatus")
 })
 @Getter
 @Setter
@@ -76,16 +78,42 @@ public class Activity extends BaseEntity {
     private String recordingUrl;
 
     /** What the customer asked for/needs - kept distinct from `notes` (the
-     *  rep's own account of the interaction). */
+     *  rep's own account of the interaction). Doubles as "requirements
+     *  discussed" for a MEETING. */
     @Column(length = 2000)
     private String requirements;
 
+    /** Doubles as "meeting notes" for a MEETING (PRD §9). */
     @Column(length = 2000)
     private String notes;
 
     /** Next time this lead needs a touch. Nullable. When set, ActivityService
-     *  mirrors it onto Lead.nextFollowUpAt so it surfaces wherever the lead
-     *  already reports that (dashboard, stale-lead banner) with zero extra
-     *  wiring. */
+     *  mirrors it onto Lead.nextFollowUpAt. Doubles as a meeting's "next
+     *  follow-up date" (PRD §9). */
     private Instant followUpAt;
+
+    // --- Call fields (PRD §7) - only meaningful when activityType == CALL ---
+
+    @Enumerated(EnumType.STRING)
+    private CallOutcome callOutcome;
+
+    @Column(length = 2000)
+    private String customerResponse;
+
+    @Enumerated(EnumType.STRING)
+    private CustomerInterest customerInterest;
+
+    @Column(length = 500)
+    private String nextAction;
+
+    // --- Meeting fields (PRD §9) - only meaningful when activityType == MEETING ---
+
+    @Enumerated(EnumType.STRING)
+    private MeetingStatus meetingStatus;
+
+    @Enumerated(EnumType.STRING)
+    private MeetingType meetingType;
+
+    @Column(length = 2000)
+    private String agenda;
 }

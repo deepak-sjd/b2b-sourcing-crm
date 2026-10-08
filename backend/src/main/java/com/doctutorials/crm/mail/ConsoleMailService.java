@@ -6,8 +6,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
- * Local-dev stand-in for real email: logs the reset link instead of sending
- * it, so you can test the full forgot-password flow without an SMTP
+ * Local-dev stand-in for real email: logs instead of sending, so you can
+ * test full flows (forgot-password, supplier enquiries) without an SMTP
  * account. Active when app.mail.enabled=false.
  *
  * Set CRM_MAIL_ENABLED=false in your local .env while you don't have SMTP
@@ -27,10 +27,11 @@ public class ConsoleMailService implements MailService {
     }
 
     @Override
-    public void sendSupplierEnquiryEmail(String toEmail, String supplierContactName, String enquiryCode,
-            String itemDescription, String quantity, String notes) {
+    public boolean sendSupplierEnquiryEmail(SupplierEnquiryEmailRequest request) {
         log.warn("[DEV MAIL - app.mail.enabled=false, no email actually sent] " +
                 "Supplier enquiry {} to {} <{}>: {} (qty: {})",
-                enquiryCode, supplierContactName, toEmail, itemDescription, quantity);
+                request.enquiryCode(), request.supplierContactName(), request.toEmail(),
+                request.itemDescription(), request.quantity());
+        return true;
     }
 }

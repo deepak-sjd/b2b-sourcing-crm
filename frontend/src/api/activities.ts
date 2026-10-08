@@ -1,10 +1,24 @@
 import { apiClient } from "./client";
 import type { ApiResponse, PageResponse } from "@/types/api";
-import type { Activity, ActivityListFilters, ActivitySummary, LogActivityRequest, ActivityType } from "@/types/activity";
+import type {
+  Activity, ActivityListFilters, ActivitySummary, LogActivityRequest, UpdateActivityRequest,
+  MeetingStatusRequest, ActivityType,
+} from "@/types/activity";
 
 export const activitiesApi = {
   async log(payload: LogActivityRequest): Promise<Activity> {
     const { data } = await apiClient.post<ApiResponse<Activity>>("/activities", payload);
+    return data.data;
+  },
+
+  async update(id: string, payload: UpdateActivityRequest): Promise<Activity> {
+    const { data } = await apiClient.put<ApiResponse<Activity>>(`/activities/${id}`, payload);
+    return data.data;
+  },
+
+  /** PRD §9 - complete/reschedule/cancel/no-show a meeting. */
+  async changeMeetingStatus(id: string, payload: MeetingStatusRequest): Promise<Activity> {
+    const { data } = await apiClient.patch<ApiResponse<Activity>>(`/activities/${id}/meeting-status`, payload);
     return data.data;
   },
 

@@ -35,6 +35,9 @@ export interface SupplierEnquiryResponse {
   enquiryCode: string;
   leadId: string;
   leadName: string;
+  /** Set when this enquiry is sourcing for a specific requirement - lets
+   *  QuotationService.prefill find "the chosen price for this requirement". */
+  requirementId: string | null;
   itemDescription: string;
   quantity: string | null;
   notes: string | null;
@@ -47,6 +50,7 @@ export interface SupplierEnquiryResponse {
 // Mirrors SupplierEnquiryRequest
 export interface SupplierEnquiryRequest {
   leadId: string;
+  requirementId?: string | null;
   itemDescription: string;
   quantity?: string | null;
   notes?: string | null;

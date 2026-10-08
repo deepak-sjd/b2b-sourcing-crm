@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Activity as ActivityIcon, Phone, Users, MapPin, Mail, MessageCircle, MoreHorizontal, Clock } from "lucide-react";
+import { Activity as ActivityIcon, Phone, Users, MapPin, Mail, MessageCircle, MoreHorizontal, Clock, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,9 @@ import { extractErrorMessage } from "@/api/client";
 import { formatDate } from "@/lib/utils";
 import {
   ACTIVITY_TYPES, ACTIVITY_TYPE_LABELS, ACTIVITY_DIRECTIONS, ACTIVITY_STATUSES, ACTIVITY_SENTIMENTS,
+  CALL_OUTCOMES, CALL_OUTCOME_LABELS, CUSTOMER_INTERESTS,
   type ActivityType, type ActivityDirection, type ActivityStatus, type ActivitySentiment,
+  type CallOutcome, type CustomerInterest,
 } from "@/types/activity";
 
 const TYPE_ICON: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
@@ -63,9 +65,17 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
   const [followUpPreset, setFollowUpPreset] = useState("None");
   const [customFollowUp, setCustomFollowUp] = useState("");
 
+  // PRD §7 call-specific fields.
+  const [callOutcome, setCallOutcome] = useState<CallOutcome | "">("");
+  const [customerResponse, setCustomerResponse] = useState("");
+  const [customerInterest, setCustomerInterest] = useState<CustomerInterest | "">("");
+  const [nextAction, setNextAction] = useState("");
+  const [realLead, setRealLead] = useState<"" | "yes" | "no">("");
+
   const needsDirection = activityType === "CALL" || activityType === "EMAIL" || activityType === "WHATSAPP";
   const needsLocation = activityType === "MEETING" || activityType === "SITE_VISIT";
   const needsDuration = activityType === "CALL" || activityType === "MEETING";
+  const isCompletedCall = activityType === "CALL" && status === "COMPLETED";
 
   const activitiesQuery = useQuery({
     queryKey: ["activities", "lead", leadId, typeFilter],
@@ -75,10 +85,13 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
   function resetForm() {
     setContactPerson(""); setLocation(""); setDurationSeconds(""); setSentiment("");
     setRequirements(""); setNotes(""); setTaggedResourceEmail(""); setFollowUpPreset("None"); setCustomFollowUp("");
+    setCallOutcome(""); setCustomerResponse(""); setCustomerInterest(""); setNextAction(""); setRealLead("");
   }
 
   const logActivity = useMutation({
     mutationFn: () => {
+      if (isCompletedCall && !callOutcome) throw new Error("Pick a call outcome first");
+
       let followUpAt: string | null = null;
       if (followUpPreset === "Custom" && customFollowUp) {
         followUpAt = new Date(customFollowUp).toISOString();
@@ -99,14 +112,20 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
         notes: notes.trim() || null,
         followUpAt,
         taggedResourceEmail: taggedResourceEmail.trim() || null,
+        callOutcome: activityType === "CALL" ? callOutcome || null : null,
+        customerResponse: activityType === "CALL" ? customerResponse.trim() || null : null,
+        customerInterest: activityType === "CALL" ? customerInterest || null : null,
+        nextAction: activityType === "CALL" ? nextAction.trim() || null : null,
+        realLead: isCompletedCall && realLead ? realLead === "yes" : null,
       });
     },
-    onSuccess: () => {
-      toast.success("Activity logged");
+    onSuccess: (_activity, _vars) => {
+      toast.success(realLead === "no" ? "Activity logged — lead moved to Scrap" : "Activity logged");
       resetForm();
       setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["activities"] });
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
     onError: (error) => toast.error(extractErrorMessage(error, "Couldn't log activity")),
   });
@@ -159,7 +178,7 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Outcome</Label>
+                  <Label>Status</Label>
                   <Select value={status} onValueChange={(v) => setStatus(v as ActivityStatus)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -178,6 +197,74 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
                       {ACTIVITY_DIRECTIONS.map((d) => <SelectItem key={d} value={d}>{d[0] + d.slice(1).toLowerCase()}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {activityType === "CALL" && (
+                <div className="space-y-3 rounded-md border border-border p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Call details</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>
+                        Outcome{isCompletedCall && <span className="text-destructive"> *</span>}
+                      </Label>
+                      <Select value={callOutcome} onValueChange={(v) => setCallOutcome(v as CallOutcome)}>
+                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          {CALL_OUTCOMES.map((o) => <SelectItem key={o} value={o}>{CALL_OUTCOME_LABELS[o]}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Customer interest</Label>
+                      <Select value={customerInterest} onValueChange={(v) => setCustomerInterest(v as CustomerInterest)}>
+                        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          {CUSTOMER_INTERESTS.map((i) => <SelectItem key={i} value={i}>{i[0] + i.slice(1).toLowerCase()}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="customer-response">Customer response</Label>
+                    <Textarea id="customer-response" rows={2} value={customerResponse} onChange={(e) => setCustomerResponse(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="next-action">Next action</Label>
+                    <Input id="next-action" value={nextAction} onChange={(e) => setNextAction(e.target.value)} placeholder="e.g. Send pricing by email" />
+                  </div>
+
+                  {isCompletedCall && (
+                    <div className="space-y-1.5 rounded-md bg-muted/60 p-2.5">
+                      <Label>Is this a real lead?</Label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRealLead("yes")}
+                          className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium ${
+                            realLead === "yes" ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRealLead("no")}
+                          className={`flex-1 rounded-md border px-3 py-1.5 text-sm font-medium ${
+                            realLead === "no" ? "border-destructive bg-red-50 text-destructive" : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          No
+                        </button>
+                      </div>
+                      {realLead === "no" && (
+                        <p className="flex items-center gap-1.5 text-xs text-destructive">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          This will move the lead to Scrap when you save.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -255,7 +342,9 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={logActivity.isPending}>{logActivity.isPending ? "Saving…" : "Log activity"}</Button>
+                <Button type="submit" disabled={logActivity.isPending || (isCompletedCall && !callOutcome)}>
+                  {logActivity.isPending ? "Saving…" : "Log activity"}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -280,11 +369,14 @@ export function LeadActivitiesTab({ leadId }: { leadId: string }) {
                   <div>
                     <p className="text-sm font-medium">
                       {ACTIVITY_TYPE_LABELS[a.activityType]}
+                      {a.callOutcome ? ` · ${CALL_OUTCOME_LABELS[a.callOutcome]}` : ""}
                       {a.contactPerson ? ` · with ${a.contactPerson}` : ""}
                       {a.loggedBy ? ` · by ${a.loggedBy.fullName}` : ""}
                     </p>
+                    {a.customerResponse && <p className="mt-0.5 text-sm text-foreground">{a.customerResponse}</p>}
                     {a.requirements && <p className="mt-0.5 text-sm text-foreground">{a.requirements}</p>}
                     {a.notes && <p className="text-sm text-muted-foreground">{a.notes}</p>}
+                    {a.nextAction && <p className="text-sm text-muted-foreground">Next: {a.nextAction}</p>}
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                       <span>{formatDate(a.scheduledAt, true)}</span>
                       {a.durationSeconds ? <span>· {a.durationSeconds}s</span> : null}

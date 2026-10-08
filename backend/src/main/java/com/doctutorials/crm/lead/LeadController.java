@@ -133,6 +133,10 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.ok("Lead reassigned", toResponse(lead)));
     }
 
+    // POST /{id}/convert-to-customer deliberately lives on LeadConversionController
+    // in the "customer" package, not here - see that class's comment. Same URL
+    // prefix either way; Spring doesn't care which package a controller lives in.
+
     @PostMapping("/{id}/touchpoint")
     public ResponseEntity<ApiResponse<Void>> recordTouchpoint(@PathVariable UUID id) {
         leadService.recordTouchpoint(id);

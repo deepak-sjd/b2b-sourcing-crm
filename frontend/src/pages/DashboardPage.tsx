@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -6,11 +7,15 @@ import {
   ArrowUpRight,
   BarChart3,
   CheckSquare,
+  FileText,
   Flame,
   IndianRupee,
   MessageCircle,
+  Radio,
   Sparkles,
+  TrendingDown,
   Trophy,
+  Truck,
   Users2,
 } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -18,6 +23,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StageDonutChart } from "@/components/dashboard/StageDonutChart";
+import { BarList } from "@/components/dashboard/BarList";
+import { DateRangeFilter, defaultDateRange } from "@/components/dashboard/DateRangeFilter";
 import { StageBadge, BuyingIntentBadge, ScoreBadge } from "@/components/leads/LeadBadges";
 import { leadsApi } from "@/api/leads";
 import { tasksApi } from "@/api/tasks";
@@ -25,7 +32,7 @@ import { activitiesApi } from "@/api/activities";
 import { reportsApi } from "@/api/reports";
 import { formatCurrencyINR, formatRelativeDay, initials } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
-import type { LeadStage } from "@/types/lead";
+import { LEAD_STAGE_LABELS, type LeadStage } from "@/types/lead";
 
 const QUICK_LINKS = [
   { to: "/leads", label: "Leads", icon: Users2 },
@@ -106,6 +113,27 @@ export function DashboardPage() {
     queryKey: ["reports", "ask", "dashboard-briefing"],
     queryFn: () => reportsApi.ask("Give me a quick, plain-language summary of my pipeline right now."),
     staleTime: 5 * 60 * 1000,
+  });
+
+  // PRD §15 reports section below — its own windowed queries, independent of
+  // the always-current KPI row/pipeline-donut/recent-leads above.
+  const [range, setRange] = useState(defaultDateRange());
+  const funnelQuery = useQuery({ queryKey: ["reports", "funnel", range], queryFn: () => reportsApi.funnel(range) });
+  const lostAnalysisQuery = useQuery({
+    queryKey: ["reports", "lost-analysis", range],
+    queryFn: () => reportsApi.lostAnalysis(range),
+  });
+  const sourcesQuery = useQuery({
+    queryKey: ["reports", "lead-sources", range],
+    queryFn: () => reportsApi.leadSources(range),
+  });
+  const suppliersQuery = useQuery({
+    queryKey: ["reports", "suppliers", range],
+    queryFn: () => reportsApi.suppliers(range),
+  });
+  const quotationsQuery = useQuery({
+    queryKey: ["reports", "quotations", range],
+    queryFn: () => reportsApi.quotations(range),
   });
 
   const summary = summaryQuery.data;
@@ -375,6 +403,161 @@ export function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {/* PRD §15: funnel, lost-business, sources, suppliers, quotations — windowed */}
+      <div className="mt-6 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-foreground">Deeper analysis</h2>
+        <DateRangeFilter value={range} onChange={setRange} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-base font-semibold text-foreground">Sales funnel</CardTitle>
+            <Link to="/reports" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              Full report <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {funnelQuery.isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : funnelQuery.data && funnelQuery.data.byStage.length > 0 ? (
+              <BarList
+                items={funnelQuery.data.byStage.map((b) => ({
+                  key: b.stage,
+                  label: LEAD_STAGE_LABELS[b.stage],
+                  value: b.count,
+                  secondary: formatCurrencyINR(b.value),
+                }))}
+              />
+            ) : (
+              <EmptyState title="No leads in this window" className="py-8" />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold text-foreground">Lost business, by reason group</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {lostAnalysisQuery.isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : lostAnalysisQuery.data && lostAnalysisQuery.data.totalLostCount > 0 ? (
+              <BarList
+                items={lostAnalysisQuery.data.byGroup.map((g) => ({
+                  key: g.group,
+                  label: g.group.replace(/_/g, " ").toLowerCase(),
+                  value: g.count,
+                  secondary: formatCurrencyINR(g.value),
+                  barClassName: "bg-destructive",
+                }))}
+              />
+            ) : (
+              <EmptyState icon={TrendingDown} title="Nothing lost in this window" className="py-8" />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold text-foreground">Leads by source</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {sourcesQuery.isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : sourcesQuery.data && sourcesQuery.data.length > 0 ? (
+              <BarList
+                items={sourcesQuery.data.map((s) => ({
+                  key: s.source,
+                  label: s.source,
+                  value: s.total,
+                  secondary: `${s.won} won`,
+                }))}
+              />
+            ) : (
+              <EmptyState icon={Radio} title="No leads in this window" className="py-8" />
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base font-semibold text-foreground">Supplier sourcing</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {suppliersQuery.isLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : suppliersQuery.data ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Active suppliers</p>
+                    <p className="text-lg font-semibold tabular-nums">{suppliersQuery.data.activeSuppliers}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Enquiries sent</p>
+                    <p className="text-lg font-semibold tabular-nums">{suppliersQuery.data.enquiriesSent}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Pending replies</p>
+                    <p className="text-lg font-semibold tabular-nums">{suppliersQuery.data.pendingReplies}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Replies received</p>
+                    <p className="text-lg font-semibold tabular-nums">{suppliersQuery.data.repliesReceived}</p>
+                  </div>
+                </div>
+                {suppliersQuery.data.bySupplier.length > 0 ? (
+                  <BarList
+                    items={suppliersQuery.data.bySupplier.slice(0, 5).map((s) => ({
+                      key: s.supplierId,
+                      label: s.supplierName,
+                      value: s.enquiries,
+                      secondary: `${s.chosen} chosen`,
+                    }))}
+                  />
+                ) : (
+                  <EmptyState icon={Truck} title="No supplier enquiries in this window" className="py-6" />
+                )}
+              </div>
+            ) : (
+              <EmptyState icon={Truck} title="No supplier enquiries in this window" className="py-8" />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mt-4">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base font-semibold text-foreground">Quotations</CardTitle>
+          <Link to="/reports" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+            Full report <ArrowUpRight className="h-3 w-3" />
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {quotationsQuery.isLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : quotationsQuery.data && quotationsQuery.data.generated > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {[
+                { label: "Generated", value: quotationsQuery.data.generated },
+                { label: "Pending", value: quotationsQuery.data.pending },
+                { label: "Accepted", value: `${quotationsQuery.data.accepted} · ${formatCurrencyINR(quotationsQuery.data.acceptedValue)}` },
+                { label: "Rejected", value: quotationsQuery.data.rejected },
+                { label: "Expired", value: quotationsQuery.data.expired },
+              ].map((stat) => (
+                <div key={stat.label} className="rounded-lg border border-border p-3">
+                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums">{stat.value}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={FileText} title="No quotations in this window" className="py-8" />
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

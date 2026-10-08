@@ -9,15 +9,18 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+
 /**
  * Real email delivery via SMTP (spring-boot-starter-mail + JavaMailSender).
- * Active whenever app.mail.enabled=true (the production default) and a
- * JavaMailSender bean exists, which Spring Boot auto-configures from the
- * spring.mail.* properties.
+ * Active whenever app.mail.enabled=true (the production default).
  *
- * A send failure here must never leak whether an email address exists in
- * the system (see AuthService.forgotPassword), so failures are logged and
- * swallowed - the HTTP caller always gets the same generic response.
+ * A reset-email failure must never leak whether an address exists in the
+ * system (see sendPasswordResetEmail - swallowed, always logged). A
+ * supplier-enquiry failure is different: the caller (SupplierEnquiryService)
+ * needs to know, so it can show "delivery failed" instead of silently
+ * looking like nothing happened - hence the boolean return there.
  */
 @Service
 @ConditionalOnProperty(prefix = "app.mail", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -25,6 +28,7 @@ import org.springframework.stereotype.Service;
 public class SmtpMailService implements MailService {
 
     private static final Logger log = LoggerFactory.getLogger(SmtpMailService.class);
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 
     private final JavaMailSender mailSender;
 
@@ -51,47 +55,59 @@ public class SmtpMailService implements MailService {
                     """.formatted(toName, resetLink));
             mailSender.send(message);
         } catch (Exception e) {
-            // Never let email delivery failure bubble up to the caller - it would
-            // either leak account existence via a 500, or block a legitimate flow
-            // over a transient SMTP issue. Log it so it's visible to ops instead.
             log.error("Failed to send password reset email to {}", toEmail, e);
         }
     }
 
     @Override
-    public void sendSupplierEnquiryEmail(String toEmail, String supplierContactName, String enquiryCode,
-            String itemDescription, String quantity, String notes) {
+    public boolean sendSupplierEnquiryEmail(SupplierEnquiryEmailRequest req) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromAddress);
-            message.setTo(toEmail);
-            message.setSubject("Price enquiry " + enquiryCode + " - " + itemDescription);
-            message.setText("""
-                    Hi %s,
-
-                    We'd like to request a price quote for the following:
-
-                    Item: %s
-                    Quantity: %s
-                    Enquiry reference: %s
-                    %s
-
-                    Please reply to this email with your price, validity, and delivery timeline.
-
-                    Thanks,
-                    """.formatted(
-                    supplierContactName != null && !supplierContactName.isBlank() ? supplierContactName : "there",
-                    itemDescription,
-                    quantity != null && !quantity.isBlank() ? quantity : "Not specified",
-                    enquiryCode,
-                    notes != null && !notes.isBlank() ? "\nAdditional details: " + notes : ""));
+            if (req.replyToEmail() != null && !req.replyToEmail().isBlank()) {
+                message.setReplyTo(req.replyToEmail());
+            }
+            message.setTo(req.toEmail());
+            // Strip CR/LF so a crafted item description can't inject extra headers
+            // via the subject line.
+            String safeSubject = ("Price enquiry " + req.enquiryCode() + " - " + req.itemDescription())
+                    .replaceAll("[\\r\\n]+", " ");
+            message.setSubject(safeSubject);
+            message.setText(buildBody(req));
             mailSender.send(message);
+            return true;
         } catch (Exception e) {
-            // Same reasoning as sendPasswordResetEmail: log and swallow. A supplier
-            // with a bad email on file must never block enquiry creation for the
-            // other suppliers on the same enquiry - see SupplierEnquiryService.create,
-            // which calls this once per supplier and doesn't let one failure abort the rest.
-            log.error("Failed to send supplier enquiry email to {}", toEmail, e);
+            log.error("Failed to send supplier enquiry email to {}", req.toEmail(), e);
+            return false;
         }
+    }
+
+    // Deliberately no customer/lead name, no budget figure - a supplier should
+    // never see who the end customer is or what they're willing to pay.
+    private String buildBody(SupplierEnquiryEmailRequest req) {
+        StringBuilder sb = new StringBuilder();
+        String greeting = req.supplierContactName() != null && !req.supplierContactName().isBlank()
+                ? req.supplierContactName() : "there";
+        sb.append("Hi ").append(greeting).append(",\n\n");
+        sb.append("We'd like to request a price quote for the following:\n\n");
+        sb.append("Item: ").append(req.itemDescription()).append("\n");
+        sb.append("Quantity: ").append(req.quantity() != null && !req.quantity().isBlank() ? req.quantity() : "Not specified").append("\n");
+        if (req.specs() != null && !req.specs().isBlank()) {
+            sb.append("Specifications: ").append(req.specs()).append("\n");
+        }
+        if (req.deliveryDate() != null) {
+            sb.append("Needed by: ").append(req.deliveryDate().format(DATE_FORMAT)).append("\n");
+        }
+        if (req.message() != null && !req.message().isBlank()) {
+            sb.append("Additional details: ").append(req.message()).append("\n");
+        }
+        sb.append("Enquiry reference: ").append(req.enquiryCode()).append("\n");
+        if (req.dueDate() != null) {
+            sb.append("\nPlease reply by ").append(req.dueDate().format(DATE_FORMAT)).append(" with your price, validity, and delivery timeline.\n");
+        } else {
+            sb.append("\nPlease reply with your price, validity, and delivery timeline.\n");
+        }
+        sb.append("\nThanks,\n").append(req.senderName() != null ? req.senderName() : "");
+        return sb.toString();
     }
 }

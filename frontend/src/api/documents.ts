@@ -1,13 +1,23 @@
 import { apiClient } from "./client";
 import type { ApiResponse, PageResponse } from "@/types/api";
-import type { CrmDocument, DocumentType } from "@/types/document";
+import type { CrmDocument, DocumentParentType, DocumentType } from "@/types/document";
+
+const PARENT_PARAM: Record<DocumentParentType, string> = {
+  LEAD: "leadId",
+  CUSTOMER: "customerId",
+  SUPPLIER: "supplierId",
+  REQUIREMENT: "requirementId",
+  QUOTATION: "quotationId",
+  ENQUIRY_REPLY: "enquiryReplyId",
+};
 
 export const documentsApi = {
-  async upload(leadId: string, file: File, type?: DocumentType): Promise<CrmDocument> {
+  async upload(parentType: DocumentParentType, parentId: string, file: File, type?: DocumentType, description?: string): Promise<CrmDocument> {
     const form = new FormData();
-    form.append("leadId", leadId);
+    form.append(PARENT_PARAM[parentType], parentId);
     form.append("file", file);
     if (type) form.append("type", type);
+    if (description) form.append("description", description);
 
     const { data } = await apiClient.post<ApiResponse<CrmDocument>>("/documents", form, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -15,9 +25,9 @@ export const documentsApi = {
     return data.data;
   },
 
-  async byLead(leadId: string, page = 0, size = 20): Promise<PageResponse<CrmDocument>> {
+  async byParent(parentType: DocumentParentType, parentId: string, page = 0, size = 20): Promise<PageResponse<CrmDocument>> {
     const { data } = await apiClient.get<ApiResponse<PageResponse<CrmDocument>>>(
-      `/documents/by-lead/${leadId}`,
+      `/documents/by/${parentType}/${parentId}`,
       { params: { page, size } },
     );
     return data.data;

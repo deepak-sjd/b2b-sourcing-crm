@@ -2,6 +2,7 @@ package com.doctutorials.crm.quotation;
 
 import com.doctutorials.crm.common.ApiResponse;
 import com.doctutorials.crm.common.PageResponse;
+import com.doctutorials.crm.quotation.dto.QuotationPrefillResponse;
 import com.doctutorials.crm.quotation.dto.QuotationRequest;
 import com.doctutorials.crm.quotation.dto.QuotationResponse;
 import jakarta.validation.Valid;
@@ -53,6 +54,22 @@ public class QuotationController {
             @PageableDefault(sort = { "createdAt", "id" }, direction = Sort.Direction.DESC) Pageable pageable) {
         Page<Quotation> page = quotationService.byCustomer(customerId, pageable);
         return ResponseEntity.ok(ApiResponse.ok(new PageResponse<>(page.map(QuotationResponse::from))));
+    }
+
+    /** Backs LeadQuotationsTab - quotations prepared directly against an active lead. */
+    @GetMapping("/by-lead/{leadId}")
+    public ResponseEntity<ApiResponse<PageResponse<QuotationResponse>>> byLead(
+            @PathVariable UUID leadId,
+            @PageableDefault(sort = { "createdAt", "id" }, direction = Sort.Direction.DESC) Pageable pageable) {
+        Page<Quotation> page = quotationService.byLead(leadId, pageable);
+        return ResponseEntity.ok(ApiResponse.ok(new PageResponse<>(page.map(QuotationResponse::from))));
+    }
+
+    /** Backs "Start from requirement" in the builder - 404 (with a clear message) if
+     *  no supplier reply has been chosen for this requirement yet. */
+    @GetMapping("/prefill")
+    public ResponseEntity<ApiResponse<QuotationPrefillResponse>> prefill(@RequestParam UUID requirementId) {
+        return ResponseEntity.ok(ApiResponse.ok(quotationService.prefill(requirementId)));
     }
 
     @PutMapping("/{id}")

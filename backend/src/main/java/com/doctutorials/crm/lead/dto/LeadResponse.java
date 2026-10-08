@@ -34,6 +34,8 @@ public record LeadResponse(
         String aiSummary,
         String nextBestAction,
         Instant aiSummaryGeneratedAt,
+        /** Set once this lead has been converted (see LeadConversionService) - null until then. */
+        UUID convertedToCustomerId,
         // Won/Lost closure (PRD §14.1/§14.2)
         Instant closedAt,
         BigDecimal finalValue,
@@ -57,7 +59,7 @@ public record LeadResponse(
                 l.getConvertProbability(), l.getSource(),
                 l.getOwner() != null ? l.getOwner().getFullName() : null,
                 l.getLastTouchpointAt(), l.getNextFollowUpAt(), daysSince, atRisk, l.getAiSummary(),
-                l.getNextBestAction(), l.getAiSummaryGeneratedAt(),
+                l.getNextBestAction(), l.getAiSummaryGeneratedAt(), l.getConvertedToCustomerId(),
                 l.getClosedAt(), l.getFinalValue(), l.getClosureRemarks(), l.getLostReason(), l.getLostComment(),
                 l.isScrapped(), l.getScrapReason(), l.getScrapRemarks(), l.getScrappedAt()
         );

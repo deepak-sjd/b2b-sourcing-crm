@@ -21,6 +21,9 @@ import { LeadActivitiesTab } from "@/components/activities/LeadActivitiesTab";
 import { LeadNotesTab } from "@/components/notes/LeadNotesTab";
 import { LeadDocumentsTab } from "@/components/documents/LeadDocumentsTab";
 import { LeadRequirementsTab } from "@/components/requirements/LeadRequirementsTab";
+import { LeadSupplierEnquiriesTab } from "@/components/suppliers/LeadSupplierEnquiriesTab";
+import { LeadQuotationsTab } from "@/components/leads/LeadQuotationsTab";
+import { ConvertToCustomerButton } from "@/components/leads/ConvertToCustomerButton";
 import { LeadAuditTab } from "@/components/leads/LeadAuditTab";
 import { ComingSoon } from "@/components/common/ComingSoon";
 import { useAuthStore } from "@/store/authStore";
@@ -87,8 +90,9 @@ export function LeadDetailPage() {
     queryClient.invalidateQueries({ queryKey: ["leads"] });
   }
 
-  // The AI Insight panel's "Refresh" button (Overview tab) uses this so a refresh
-  // updates this page's cached lead immediately, the same way changeStage does above.
+  // Shared by the AI Insight panel's "Refresh" button (both on the Overview
+  // tab and the AI tab) so a refresh there updates this page's cached lead
+  // immediately, the same way changeStage does above.
   function handleLeadUpdated(updated: typeof leadQuery.data) {
     if (!updated) return;
     syncLead(updated);
@@ -222,6 +226,7 @@ export function LeadDetailPage() {
                 <Pencil className="h-4 w-4" />
                 Edit
               </Button>
+              <ConvertToCustomerButton lead={lead} />
             </>
           )}
           {canWrite && !lead.scrapped && lead.stage !== "WON" && lead.stage !== "LOST" && (
@@ -238,12 +243,23 @@ export function LeadDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="requirements">Requirements</TabsTrigger>
+          <TabsTrigger value="supplier-enquiries">Supplier Enquiries</TabsTrigger>
+          <TabsTrigger value="quotations">Quotations</TabsTrigger>
+          <TabsTrigger value="deals">Deals</TabsTrigger>
           <TabsTrigger value="tasks">Tasks</TabsTrigger>
           <TabsTrigger value="calls">Activities</TabsTrigger>
+          <TabsTrigger value="emails">Emails</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="meetings">Meetings</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+          <TabsTrigger value="automation">Automation</TabsTrigger>
+          <TabsTrigger value="ai">AI</TabsTrigger>
+          <TabsTrigger value="support">Support Tickets</TabsTrigger>
+          <TabsTrigger value="contacts">Related Contacts</TabsTrigger>
+          <TabsTrigger value="companies">Related Companies</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -259,11 +275,34 @@ export function LeadDetailPage() {
         <TabsContent value="requirements">
           <LeadRequirementsTab leadId={lead.id} />
         </TabsContent>
+        <TabsContent value="supplier-enquiries">
+          <LeadSupplierEnquiriesTab leadId={lead.id} />
+        </TabsContent>
+        <TabsContent value="quotations">
+          <LeadQuotationsTab leadId={lead.id} />
+        </TabsContent>
+        <TabsContent value="deals">
+          <ComingSoon
+            title="Deals"
+            description="Track enrollment/payment deals tied to this lead once the Deals module ships."
+            phase="Phase 3"
+          />
+        </TabsContent>
         <TabsContent value="tasks">
           <LeadTasksTab leadId={lead.id} />
         </TabsContent>
         <TabsContent value="calls">
           <LeadActivitiesTab leadId={lead.id} />
+        </TabsContent>
+        <TabsContent value="emails">
+          <ComingSoon title="Email thread" description="Two-way email sync isn't wired up yet." phase="Phase 2" />
+        </TabsContent>
+        <TabsContent value="whatsapp">
+          <ComingSoon
+            title="WhatsApp conversation"
+            description="WhatsApp Business API integration for this lead."
+            phase="Phase 2"
+          />
         </TabsContent>
         <TabsContent value="meetings">
           <ComingSoon title="Meetings" description="Scheduled customer meetings." phase="Phase 2" />
@@ -274,8 +313,33 @@ export function LeadDetailPage() {
         <TabsContent value="documents">
           <LeadDocumentsTab leadId={lead.id} />
         </TabsContent>
+        <TabsContent value="invoices">
+          <ComingSoon title="Invoices" description="Payment plans and invoices for this lead." phase="Phase 3" />
+        </TabsContent>
         <TabsContent value="audit">
           <LeadAuditTab leadId={lead.id} />
+        </TabsContent>
+        <TabsContent value="automation">
+          <ComingSoon title="Automation" description="Workflow rules triggered by this lead's activity." phase="Phase 3" />
+        </TabsContent>
+        <TabsContent value="ai">
+          <div className="space-y-4">
+            <LeadOverviewTab lead={lead} onLeadUpdated={handleLeadUpdated} />
+            <ComingSoon
+              title="Next best actions & suggested outreach"
+              description="AI-generated action recommendations and outreach drafts, beyond the summary shown above."
+              phase="Phase 2"
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="support">
+          <ComingSoon title="Support tickets" description="No support tickets integration yet." phase="Phase 3" />
+        </TabsContent>
+        <TabsContent value="contacts">
+          <ComingSoon title="Related contacts" description="Parents, guardians, or other contacts linked to this lead." phase="Phase 2" />
+        </TabsContent>
+        <TabsContent value="companies">
+          <ComingSoon title="Related companies" description="Organizations associated with this lead (e.g. corporate tie-ups)." phase="Phase 3" />
         </TabsContent>
       </Tabs>
 

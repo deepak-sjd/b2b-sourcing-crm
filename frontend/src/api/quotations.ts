@@ -2,6 +2,7 @@ import { apiClient } from "./client";
 import type { ApiResponse, PageResponse } from "@/types/api";
 import type {
   QuotationListFilters,
+  QuotationPrefillResponse,
   QuotationRequest,
   QuotationResponse,
   QuotationStatus,
@@ -27,6 +28,23 @@ export const quotationsApi = {
       `/quotations/by-customer/${customerId}`,
       { params: { page, size } },
     );
+    return data.data;
+  },
+
+  async byLead(leadId: string, page = 0, size = 10): Promise<PageResponse<QuotationResponse>> {
+    const { data } = await apiClient.get<ApiResponse<PageResponse<QuotationResponse>>>(
+      `/quotations/by-lead/${leadId}`,
+      { params: { page, size } },
+    );
+    return data.data;
+  },
+
+  /** 404s (via apiClient's normal error path — let extractErrorMessage surface it) when
+   *  no supplier reply has been chosen for this requirement yet. */
+  async prefill(requirementId: string): Promise<QuotationPrefillResponse> {
+    const { data } = await apiClient.get<ApiResponse<QuotationPrefillResponse>>("/quotations/prefill", {
+      params: { requirementId },
+    });
     return data.data;
   },
 

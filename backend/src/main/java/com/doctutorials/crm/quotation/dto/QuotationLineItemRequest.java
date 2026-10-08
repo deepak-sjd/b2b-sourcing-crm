@@ -18,5 +18,8 @@ public record QuotationLineItemRequest(
         UUID supplierId,
         @DecimalMin(value = "0", message = "Supplier price can't be negative") BigDecimal supplierPrice,
         @NotNull @DecimalMin(value = "0", message = "Selling price can't be negative") BigDecimal sellingPrice,
+        /** When set, supplierId/supplierPrice above are ignored — QuotationService
+         *  copies both from the chosen reply instead. See its applyLineItem. */
+        UUID enquiryReplyId,
         String remarks
 ) {}

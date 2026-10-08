@@ -1,13 +1,12 @@
 package com.doctutorials.crm.document;
 
-/**
- * Coaching-institute-oriented default categories. Adjust to match the
- * client's actual document checklist if it differs from this guess.
- */
+// PRD §20. See V56 for the mapping from the old coaching-product values.
 public enum DocumentType {
-    ID_PROOF,
-    MARKSHEET,
-    PAYMENT_RECEIPT,
-    AGREEMENT,
+    CUSTOMER_DOCUMENT,
+    SUPPLIER_QUOTATION,
+    CUSTOMER_QUOTATION,
+    PRODUCT_DOCUMENT,
+    MEETING_DOCUMENT,
+    REQUIREMENT_DOCUMENT,
     OTHER
 }

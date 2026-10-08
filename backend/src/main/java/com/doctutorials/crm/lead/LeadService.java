@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -57,12 +58,14 @@ public class LeadService {
     @Transactional
     public Lead update(UUID id, LeadRequest req) {
         Lead lead = getById(id);
+        Map<String, Object> before = snapshotForUpdate(lead);
         applyRequest(lead, req);
         scoringService.rescore(lead);
         aiInsightService.generate(lead);
 
         Lead saved = leadRepository.save(lead);
-        auditService.log("Lead", saved.getId(), AuditAction.UPDATE, "Lead details updated");
+        auditService.logChange("Lead", saved.getId(), AuditAction.UPDATE, "Lead details updated",
+                before, snapshotForUpdate(saved));
         return saved;
     }
 
@@ -92,8 +95,9 @@ public class LeadService {
         aiInsightService.generate(lead);
         Lead saved = leadRepository.save(lead);
 
-        auditService.log("Lead", id, AuditAction.STAGE_CHANGE,
-                "Stage changed from " + oldStage + " to " + newStage);
+        auditService.logChange("Lead", id, AuditAction.STAGE_CHANGE,
+                "Stage changed from " + oldStage + " to " + newStage,
+                Map.of("stage", oldStage), Map.of("stage", newStage));
         return saved;
     }
 
@@ -111,9 +115,10 @@ public class LeadService {
         aiInsightService.generate(lead);
 
         Lead saved = leadRepository.save(lead);
-        auditService.log("Lead", id, AuditAction.STAGE_CHANGE,
-                "Marked WON (from " + oldStage + ")"
-                        + (finalValue != null ? " - final value " + finalValue : ""));
+        auditService.logChange("Lead", id, AuditAction.STAGE_CHANGE,
+                "Marked WON (from " + oldStage + ")" + (finalValue != null ? " - final value " + finalValue : ""),
+                mapOf("stage", oldStage, "finalValue", null, "closureRemarks", null),
+                mapOf("stage", LeadStage.WON, "finalValue", finalValue, "closureRemarks", remarks));
         return saved;
     }
 
@@ -131,8 +136,10 @@ public class LeadService {
         aiInsightService.generate(lead);
 
         Lead saved = leadRepository.save(lead);
-        auditService.log("Lead", id, AuditAction.STAGE_CHANGE,
-                "Marked LOST (from " + oldStage + ") - reason: " + reason);
+        auditService.logChange("Lead", id, AuditAction.STAGE_CHANGE,
+                "Marked LOST (from " + oldStage + ") - reason: " + reason,
+                mapOf("stage", oldStage, "lostReason", null, "lostComment", null),
+                mapOf("stage", LeadStage.LOST, "lostReason", reason, "lostComment", comment));
         return saved;
     }
 
@@ -166,7 +173,9 @@ public class LeadService {
         lead.setScrappedAt(Instant.now());
 
         Lead saved = leadRepository.save(lead);
-        auditService.log("Lead", id, AuditAction.DELETE, "Moved to Scrap - reason: " + reason);
+        auditService.logChange("Lead", id, AuditAction.DELETE, "Moved to Scrap - reason: " + reason,
+                mapOf("scrapped", false, "scrapReason", null),
+                mapOf("scrapped", true, "scrapReason", reason));
         return saved;
     }
 
@@ -184,6 +193,7 @@ public class LeadService {
         if (!lead.isScrapped()) {
             throw new BadRequestException("This lead is not in Scrap");
         }
+        ScrapReason previousReason = lead.getScrapReason();
 
         lead.setScrapped(false);
         lead.setScrapReason(null);
@@ -191,7 +201,9 @@ public class LeadService {
         lead.setScrappedAt(null);
 
         Lead saved = leadRepository.save(lead);
-        auditService.log("Lead", id, AuditAction.UPDATE, "Reactivated from Scrap");
+        auditService.logChange("Lead", id, AuditAction.UPDATE, "Reactivated from Scrap",
+                mapOf("scrapped", true, "scrapReason", previousReason),
+                mapOf("scrapped", false, "scrapReason", null));
         return saved;
     }
 
@@ -222,9 +234,13 @@ public class LeadService {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> ResourceNotFoundException.of("User", ownerId));
         leadAccessService.assertCanAssignOwner(currentUserService.get(), owner);
+        User previousOwner = lead.getOwner();
         lead.setOwner(owner);
         Lead saved = leadRepository.save(lead);
-        auditService.log("Lead", id, AuditAction.UPDATE, "Reassigned to " + owner.getFullName());
+        auditService.logChange("Lead", id, AuditAction.UPDATE, "Reassigned to " + owner.getFullName(),
+                mapOf("ownerId", previousOwner != null ? previousOwner.getId() : null,
+                        "ownerName", previousOwner != null ? previousOwner.getFullName() : null),
+                mapOf("ownerId", owner.getId(), "ownerName", owner.getFullName()));
         return saved;
     }
 
@@ -359,5 +375,19 @@ public class LeadService {
                 lead.setOwner(autoOwner);
             }
         }
+    }
+
+    private Map<String, Object> snapshotForUpdate(Lead lead) {
+        return mapOf("fullName", lead.getFullName(), "phone", lead.getPhone(), "email", lead.getEmail(),
+                "city", lead.getCity(), "interest", lead.getInterest(), "budget", lead.getBudget(),
+                "priority", lead.getPriority(), "source", lead.getSource(), "campaign", lead.getCampaign());
+    }
+
+    // Map.of() rejects null values, which `before` snapshots legitimately have
+    // (e.g. no owner yet) - this just allows null.
+    private static Map<String, Object> mapOf(Object... kv) {
+        Map<String, Object> map = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < kv.length; i += 2) map.put((String) kv[i], kv[i + 1]);
+        return map;
     }
 }

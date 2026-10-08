@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ClipboardList, Pencil, Plus } from "lucide-react";
+import { ClipboardList, Pencil, Plus, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { PriorityBadge } from "@/components/leads/LeadBadges";
 import { NeedsSupplierBadge, RequirementStatusBadge } from "@/components/requirements/RequirementBadges";
 import { RequirementFormDialog } from "@/components/requirements/RequirementFormDialog";
+import { RequirementSourcingDialog } from "@/components/enquiries/RequirementSourcingDialog";
 import { requirementsApi } from "@/api/requirements";
 import { extractErrorMessage } from "@/api/client";
 import { formatCurrencyINR, formatDate } from "@/lib/utils";
@@ -33,6 +34,7 @@ export function LeadRequirementsTab({ leadId }: { leadId: string }) {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Requirement | null>(null);
+  const [sourcingFor, setSourcingFor] = useState<Requirement | null>(null);
 
   const query = useQuery({
     queryKey: ["requirements", "lead", leadId],
@@ -104,6 +106,10 @@ export function LeadRequirementsTab({ leadId }: { leadId: string }) {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Button variant="outline" size="sm" onClick={() => setSourcingFor(r)}>
+                      <Truck className="h-3.5 w-3.5" />
+                      Sourcing
+                    </Button>
                     <Button variant="outline" size="sm" disabled={locked} onClick={() => openEdit(r)}>
                       <Pencil className="h-3.5 w-3.5" />
                       Edit
@@ -145,6 +151,13 @@ export function LeadRequirementsTab({ leadId }: { leadId: string }) {
       )}
 
       <RequirementFormDialog open={formOpen} onOpenChange={setFormOpen} leadId={leadId} requirement={editing} />
+      {sourcingFor && (
+        <RequirementSourcingDialog
+          requirement={sourcingFor}
+          open={!!sourcingFor}
+          onOpenChange={(open) => !open && setSourcingFor(null)}
+        />
+      )}
     </div>
   );
 }

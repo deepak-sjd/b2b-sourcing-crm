@@ -6,7 +6,9 @@ export type LeadStage =
   | "NEW"
   | "CONTACTED"
   | "QUALIFIED"
+  | "MEETING"
   | "OPPORTUNITY"
+  | "QUOTATION"
   | "WON"
   | "LOST";
 
@@ -14,7 +16,9 @@ export const LEAD_STAGES: LeadStage[] = [
   "NEW",
   "CONTACTED",
   "QUALIFIED",
+  "MEETING",
   "OPPORTUNITY",
+  "QUOTATION",
   "WON",
   "LOST",
 ];
@@ -23,7 +27,9 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   NEW: "New",
   CONTACTED: "Contacted",
   QUALIFIED: "Qualified",
+  MEETING: "Meeting",
   OPPORTUNITY: "Opportunity",
+  QUOTATION: "Quotation",
   WON: "Won",
   LOST: "Lost",
 };
