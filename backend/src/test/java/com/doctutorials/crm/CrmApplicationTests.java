@@ -2,18 +2,26 @@ package com.doctutorials.crm;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Smoke test: fails fast in CI if the Spring context can't wire up
- * (bad bean definitions, missing config, etc.) before anything reaches production.
+ * Boots the full app against a throwaway real PostgreSQL, running every Flyway
+ * migration from V1 to the latest, then Hibernate's schema validation.
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@Testcontainers
 class CrmApplicationTests {
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Test
     void contextLoads() {
-        // Intentionally empty: Spring throws if the ApplicationContext fails to start.
     }
 }
