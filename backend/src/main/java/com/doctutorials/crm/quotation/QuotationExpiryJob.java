@@ -1,83 +1,30 @@
 package com.doctutorials.crm.quotation;
 
-import com.doctutorials.crm.common.BaseEntity;
-import com.doctutorials.crm.supplier.Supplier;
-import com.doctutorials.crm.supplier.enquiry.SupplierEnquiryReply;
-import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Getter;
-import lombok.Setter;
-
-import java.math.BigDecimal;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
 
 /**
- * One product/service row on a Quotation. Carries its own optional Supplier +
- * supplierPrice link so the quotation keeps the "price trail" PRD §12.3 asks
- * for - every line can show where its cost came from, even though the fuller
- * RFQ/enquiry-reply workflow (PRD §12.2) is a separate, not-yet-built feature.
- * productName is free text rather than a link to a Product entity, since
- * there's no Product master list yet either (PRD §21) - see this module's
- * chat notes for that gap.
+ * Nightly job that marks quotations whose validUntil date has passed as EXPIRED.
+ * The actual work (and its @Transactional boundary + audit logging) lives in
+ * QuotationService.expireOverdueQuotationsForSystemJob().
  */
-@Entity
-@Table(name = "quotation_line_items", indexes = {
-        @Index(name = "idx_quotation_line_items_quotation", columnList = "quotation_id")
-})
-@Getter
-@Setter
-public class QuotationLineItem extends BaseEntity {
+@Component
+@RequiredArgsConstructor
+public class QuotationExpiryJob {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "quotation_id")
-    private Quotation quotation;
+    private static final Logger log = LoggerFactory.getLogger(QuotationExpiryJob.class);
 
-    /** Stable row order within the quotation - assigned by QuotationService.syncLineItems. */
-    @Column(nullable = false)
-    private int sortOrder;
+    private final QuotationService quotationService;
 
-    @NotBlank
-    @Column(nullable = false)
-    private String productName;
-
-    private String description;
-
-    @Column(nullable = false)
-    private String unit = "Nos";
-
-    @Column(nullable = false, precision = 14, scale = 3)
-    private BigDecimal quantity;
-
-    /** Where this line's cost was sourced from - optional link to the Supplier module. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "supplier_id")
-    private Supplier supplier;
-
-    /** Cost price per unit, as quoted by the supplier. Null when sourced internally / no supplier involved. */
-    @Column(precision = 14, scale = 2)
-    private BigDecimal supplierPrice;
-
-    /** Set when this line's supplier + supplierPrice were taken from a chosen
-     *  Supplier Enquiry reply (PRD §12.3's price trail) rather than typed by hand.
-     *  QuotationService.applyLineItem overwrites supplier/supplierPrice from the
-     *  reply itself when this is set, ignoring whatever the client sent for them. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "enquiry_reply_id")
-    private SupplierEnquiryReply enquiryReply;
-
-    /** Unit price shown to the customer. */
-    @Column(nullable = false, precision = 14, scale = 2)
-    private BigDecimal sellingPrice;
-
-    // --- Computed by QuotationService.recomputeTotals - never trust a client-sent value. ---
-    @Column(nullable = false, precision = 14, scale = 2)
-    private BigDecimal lineTotal = BigDecimal.ZERO;
-    /** Null (not zero) when there's no supplierPrice to compare against, so the UI can tell
-     *  "no margin data" apart from "zero margin". */
-    @Column(precision = 14, scale = 2)
-    private BigDecimal marginAmount;
-    @Column(precision = 5, scale = 2)
-    private BigDecimal marginPercent;
-
-    @Column(length = 500)
-    private String remarks;
+    /** Every day at 00:30 server time. */
+    @Scheduled(cron = "0 30 0 * * *")
+    public void expireOverdueQuotations() {
+        int expired = quotationService.expireOverdueQuotationsForSystemJob();
+        if (expired > 0) {
+            log.info("Quotation expiry: marked {} quotation(s) as EXPIRED", expired);
+        }
+    }
 }

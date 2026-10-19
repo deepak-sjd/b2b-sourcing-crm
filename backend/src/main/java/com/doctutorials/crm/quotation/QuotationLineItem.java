@@ -2,6 +2,7 @@ package com.doctutorials.crm.quotation;
 
 import com.doctutorials.crm.common.BaseEntity;
 import com.doctutorials.crm.supplier.Supplier;
+import com.doctutorials.crm.supplier.enquiry.SupplierEnquiryReply;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
@@ -10,13 +11,12 @@ import lombok.Setter;
 import java.math.BigDecimal;
 
 /**
- * One product/service row on a Quotation. Carries its own optional Supplier +
- * supplierPrice link so the quotation keeps the "price trail" PRD §12.3 asks
- * for - every line can show where its cost came from, even though the fuller
- * RFQ/enquiry-reply workflow (PRD §12.2) is a separate, not-yet-built feature.
+ * One product/service row on a Quotation. Carries its own price trail (PRD §12.3):
+ * an optional Supplier + supplierPrice, and - when the cost came from the
+ * RFQ/enquiry workflow (PRD §12.2) - a link to the chosen SupplierEnquiryReply,
+ * so every line can show where its cost came from.
  * productName is free text rather than a link to a Product entity, since
- * there's no Product master list yet either (PRD §21) - see this module's
- * chat notes for that gap.
+ * there's no Product master list yet (PRD §21).
  */
 @Entity
 @Table(name = "quotation_line_items", indexes = {
@@ -54,6 +54,11 @@ public class QuotationLineItem extends BaseEntity {
     /** Cost price per unit, as quoted by the supplier. Null when sourced internally / no supplier involved. */
     @Column(precision = 14, scale = 2)
     private BigDecimal supplierPrice;
+
+    /** Set when supplier/supplierPrice were taken from a chosen enquiry reply. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "enquiry_reply_id")
+    private SupplierEnquiryReply enquiryReply;
 
     /** Unit price shown to the customer. */
     @Column(nullable = false, precision = 14, scale = 2)

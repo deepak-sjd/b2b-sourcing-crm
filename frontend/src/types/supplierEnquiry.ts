@@ -1,8 +1,10 @@
-// Mirrors com.doctutorials.crm.supplier.enquiry.* — PRD 12.2's
-// Customer Requirement -> Supplier Enquiry -> Supplier Reply -> chosen price chain.
+// Mirrors com.doctutorials.crm.supplier.enquiry.dto.* field for field.
+// Backend serializes with default-property-inclusion: non_null, so any
+// nullable Java field may be ABSENT in JSON, not just null.
 
 export type SupplierEnquiryStatus = "OPEN" | "CLOSED";
 export type SupplierReplyStatus = "PENDING" | "REPLIED" | "DECLINED";
+export type SupplierStatus = "PENDING_VERIFICATION" | "VERIFIED" | "ON_HOLD" | "BLACKLISTED";
 
 export const SUPPLIER_REPLY_STATUS_LABELS: Record<SupplierReplyStatus, string> = {
   PENDING: "Awaiting reply",
@@ -10,56 +12,64 @@ export const SUPPLIER_REPLY_STATUS_LABELS: Record<SupplierReplyStatus, string> =
   DECLINED: "Declined",
 };
 
-// Mirrors SupplierEnquiryReplyResponse
+// SupplierEnquiryReplyResponse
 export interface SupplierEnquiryReplyResponse {
   id: string;
+  enquiryId: string;
+  requirementId?: string | null;
   supplierId: string;
+  supplierCode: string;
   supplierName: string;
-  supplierContactEmail: string | null;
+  supplierContactEmail?: string | null;
+  supplierStatus: SupplierStatus;
   status: SupplierReplyStatus;
-  price: number | null;
+  emailSent: boolean;
+  emailError?: string | null;
+  emailSentAt?: string | null;
+  price?: number | null;
   currency: string;
-  validUntil: string | null;
-  deliveryInfo: string | null;
-  supplierReference: string | null;
-  terms: string | null;
-  remarks: string | null;
+  validUntil?: string | null; // yyyy-MM-dd
+  expired: boolean;
+  deliveryInfo?: string | null;
+  supplierReference?: string | null;
+  terms?: string | null;
+  remarks?: string | null;
   chosen: boolean;
-  emailSentAt: string | null;
-  repliedAt: string | null;
+  repliedAt?: string | null;
+  // Only populated on GET /supplier-enquiries/by-supplier/{id}
+  enquiryCode?: string | null;
+  itemDescription?: string | null;
+  leadName?: string | null;
 }
 
-// Mirrors SupplierEnquiryResponse
+// SupplierEnquiryResponse
 export interface SupplierEnquiryResponse {
   id: string;
   enquiryCode: string;
+  requirementId?: string | null; // null on enquiries raised before requirements were linked
   leadId: string;
   leadName: string;
-  /** Set when this enquiry is sourcing for a specific requirement - lets
-   *  QuotationService.prefill find "the chosen price for this requirement". */
-  requirementId: string | null;
-  itemDescription: string;
-  quantity: string | null;
-  notes: string | null;
-  status: SupplierEnquiryStatus;
-  createdByName: string | null;
-  createdAt: string;
-  replies: SupplierEnquiryReplyResponse[];
-}
-
-// Mirrors SupplierEnquiryRequest
-export interface SupplierEnquiryRequest {
-  leadId: string;
-  requirementId?: string | null;
   itemDescription: string;
   quantity?: string | null;
   notes?: string | null;
-  supplierIds: string[];
+  status: SupplierEnquiryStatus;
+  createdByName?: string | null;
+  createdAt: string;
+  responseDueDate?: string | null;
+  replies: SupplierEnquiryReplyResponse[];
 }
 
-// Mirrors SupplierEnquiryReplyRequest
+// SupplierEnquiryRequest: enquiries are ALWAYS created from a requirement.
+export interface SupplierEnquiryRequest {
+  requirementId: string;
+  supplierIds: string[]; // 1..20
+  message?: string | null;
+  responseDueDate?: string | null;
+}
+
+// SupplierEnquiryReplyRequest
 export interface SupplierEnquiryReplyRequest {
-  status?: SupplierReplyStatus;
+  status: SupplierReplyStatus; // required by the backend (@NotNull)
   price?: number | null;
   currency?: string | null;
   validUntil?: string | null;

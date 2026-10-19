@@ -1,99 +1,77 @@
-import { NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Users2,
-  Archive,
-  Contact2,
-  Building2,
-  Truck,
-  ClipboardList,
-  CheckSquare,
-  Activity,
-  BarChart3,
-  UserCog,
-  Users,
-  ScrollText,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/store/authStore";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-interface NavItem {
-  to: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
+import { AppLayout } from "@/components/layout/AppLayout";
+import { ProtectedRoute } from "@/routes/ProtectedRoute";
 
-const MAIN_NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/leads", label: "Leads", icon: Users2 },
-  { to: "/leads/scrap", label: "Scrap Records", icon: Archive },
-  { to: "/contacts", label: "Contacts", icon: Contact2 },
-  { to: "/customers", label: "Customers", icon: Building2 },
-  { to: "/requirements", label: "Requirements", icon: ClipboardList },
-  { to: "/suppliers", label: "Suppliers", icon: Truck },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
-  { to: "/activities", label: "Activities", icon: Activity },
-  { to: "/reports", label: "Reports", icon: BarChart3 },
-];
+import { LoginPage } from "@/pages/LoginPage";
+import { RegisterPage } from "@/pages/RegisterPage";
+import { DashboardPage } from "@/pages/DashboardPage";
+import { LeadsPage } from "@/pages/LeadsPage";
+import { LeadDetailPage } from "@/pages/LeadDetailPage";
+import { ScrapPage } from "@/pages/ScrapPage";
+import { ContactsPage } from "@/pages/ContactsPage";
+import { CustomersPage } from "@/pages/CustomersPage";
+import { CustomerDetailPage } from "@/pages/CustomerDetailPage";
+import { RequirementsPage } from "@/pages/RequirementsPage";
+import { SuppliersPage } from "@/pages/SuppliersPage";
+import { TasksPage } from "@/pages/TasksPage";
+import { ActivitiesPage } from "@/pages/ActivitiesPage";
+import { ReportsPage } from "@/pages/ReportsPage";
+import { QuotationsPage } from "@/pages/QuotationsPage";
+import { QuotationBuilderPage } from "@/pages/QuotationBuilderPage";
+import { UsersPage } from "@/pages/UsersPage";
+import { TeamsPage } from "@/pages/TeamsPage";
+import { AuditLogPage } from "@/pages/AuditLogPage";
+import { AutomationPage } from "@/pages/AutomationPage";
+import { WhatsAppPage } from "@/pages/WhatsAppPage";
+import { NotFoundPage } from "@/pages/NotFoundPage";
 
-const ADMIN_NAV: NavItem[] = [
-  { to: "/users", label: "Users", icon: UserCog },
-  { to: "/teams", label: "Teams", icon: Users },
-  { to: "/audit-log", label: "Audit Log", icon: ScrollText },
-];
-
-function NavLinkItem({ item }: { item: NavItem }) {
-  const Icon = item.icon;
+export function App() {
   return (
-    <NavLink
-      to={item.to}
-      end={item.to === "/leads"}
-      className={({ isActive }) =>
-        cn(
-          "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-          isActive
-            ? "bg-accent text-accent-foreground"
-            : "text-sidebar-foreground hover:bg-accent/60 hover:text-accent-foreground",
-        )
-      }
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      {item.label}
-    </NavLink>
-  );
-}
+    <BrowserRouter>
+      <Routes>
+        {/* Public */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-export function Sidebar() {
-  const role = useAuthStore((s) => s.user?.role);
-  const canSeeAdmin = role === "SUPER_ADMIN" || role === "ADMIN";
+        {/* Authenticated */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
 
-  return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
-          D
-        </div>
-        <span className="text-[15px] font-semibold tracking-tight">
-          DocTutorials <span className="text-muted-foreground font-normal">CRM</span>
-        </span>
-      </div>
+            <Route path="/leads" element={<LeadsPage />} />
+            <Route path="/leads/scrap" element={<ScrapPage />} />
+            <Route path="/leads/:leadId" element={<LeadDetailPage />} />
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3 thin-scrollbar">
-        {MAIN_NAV.map((item) => (
-          <NavLinkItem key={item.to} item={item} />
-        ))}
+            <Route path="/contacts" element={<ContactsPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
 
-        {canSeeAdmin && (
-          <>
-            <p className="mb-1 mt-5 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Admin
-            </p>
-            {ADMIN_NAV.map((item) => (
-              <NavLinkItem key={item.to} item={item} />
-            ))}
-          </>
-        )}
-      </nav>
-    </aside>
+            <Route path="/requirements" element={<RequirementsPage />} />
+            <Route path="/suppliers" element={<SuppliersPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/activities" element={<ActivitiesPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+
+            <Route path="/quotations" element={<QuotationsPage />} />
+            <Route path="/quotations/new" element={<QuotationBuilderPage />} />
+            <Route path="/quotations/:quotationId" element={<QuotationBuilderPage />} />
+
+            <Route path="/automation" element={<AutomationPage />} />
+            <Route path="/whatsapp" element={<WhatsAppPage />} />
+
+            {/* Admin only */}
+            <Route element={<ProtectedRoute allowedRoles={["SUPER_ADMIN", "ADMIN"]} />}>
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/teams" element={<TeamsPage />} />
+              <Route path="/audit-log" element={<AuditLogPage />} />
+            </Route>
+          </Route>
+        </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
