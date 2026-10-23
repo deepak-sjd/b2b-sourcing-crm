@@ -1,5 +1,11 @@
 package com.doctutorials.crm;
-
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import com.doctutorials.crm.organization.Organization;
 import com.doctutorials.crm.organization.OrganizationRepository;
 import com.doctutorials.crm.team.Team;
@@ -34,6 +40,7 @@ class TenantIsolationTest {
     @Autowired OrganizationRepository organizations;
     @Autowired TeamRepository teams;
     @Autowired UserRepository users;
+        @Autowired JdbcTemplate jdbc;
 
     private Organization newOrg(String prefix) {
         Organization org = new Organization();
@@ -107,5 +114,68 @@ class TenantIsolationTest {
         assertThat(TenantContext.supply(b.getId(), () -> teams.existsById(teamA.getId()))).isFalse();
         TenantContext.runAs(b.getId(), () -> teams.deleteById(teamA.getId()));
         assertThat(TenantContext.supply(a.getId(), () -> teams.findById(teamA.getId()))).isPresent();
+    }
+
+        @Test
+    void everyConnectionCarriesTheCurrentTenant() {
+        Organization a = newOrg("i");
+        String inTenant = TenantContext.supply(a.getId(), () ->
+                jdbc.queryForObject("select current_setting('app.tenant_id', true)", String.class));
+        assertThat(inTenant).isEqualTo(a.getId().toString());
+
+        String noTenant = jdbc.queryForObject("select current_setting('app.tenant_id', true)", String.class);
+        assertThat(noTenant).isEqualTo(TenantContext.SYSTEM.toString());
+    }
+
+    @Test
+    void postgresRowLevelSecurityHidesOtherTenantsFromTheAppRole() throws Exception {
+        Organization a = newOrg("j");
+        Organization b = newOrg("k");
+        Team teamA = newTeam(a, "RLS probe");
+
+        try (Connection admin = DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             Statement st = admin.createStatement()) {
+            st.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rls_probe') THEN "
+                    + "CREATE ROLE rls_probe LOGIN PASSWORD 'probe' NOSUPERUSER NOBYPASSRLS; END IF; END $$");
+            st.execute("GRANT USAGE ON SCHEMA public TO rls_probe");
+            st.execute("GRANT SELECT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO rls_probe");
+        }
+
+        try (Connection probe = DriverManager.getConnection(postgres.getJdbcUrl(), "rls_probe", "probe")) {
+            assertThat(visibleTeams(probe, a.getId().toString(), teamA.getId())).isEqualTo(1);
+            assertThat(visibleTeams(probe, b.getId().toString(), teamA.getId())).isZero();
+            assertThat(visibleTeams(probe, "", teamA.getId())).isZero();
+            assertThat(visibleTeams(probe, TenantContext.SYSTEM.toString(), teamA.getId())).isZero();
+
+            setTenant(probe, b.getId().toString());
+            try (PreparedStatement ps = probe.prepareStatement("update teams set description = 'hacked' where id = ?")) {
+                ps.setObject(1, teamA.getId());
+                assertThat(ps.executeUpdate()).isZero();
+            }
+            try (PreparedStatement ps = probe.prepareStatement("delete from teams where id = ?")) {
+                ps.setObject(1, teamA.getId());
+                assertThat(ps.executeUpdate()).isZero();
+            }
+            assertThat(visibleTeams(probe, a.getId().toString(), teamA.getId())).isEqualTo(1);
+        }
+    }
+
+    private int visibleTeams(Connection connection, String tenant, UUID teamId) throws SQLException {
+        setTenant(connection, tenant);
+        try (PreparedStatement ps = connection.prepareStatement("select count(*) from teams where id = ?")) {
+            ps.setObject(1, teamId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private void setTenant(Connection connection, String tenant) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement("select set_config('app.tenant_id', ?, false)")) {
+            ps.setString(1, tenant);
+            ps.execute();
+        }
     }
 }
