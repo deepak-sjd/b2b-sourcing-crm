@@ -17,7 +17,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
     @Query(value = """
         SELECT * FROM audit_logs a
-        WHERE (:entityType IS NULL OR a.entity_type = :entityType)
+        WHERE a.organization_id = :#{T(com.doctutorials.crm.tenant.TenantContext).currentOrSystem()}
+          AND (:entityType IS NULL OR a.entity_type = :entityType)
           AND (:actorUserId IS NULL OR a.actor_user_id = :actorUserId)
           AND (:action IS NULL OR a.action = :action)
           AND (:from IS NULL OR a.created_at >= :from)
@@ -26,7 +27,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
         """,
         countQuery = """
         SELECT count(*) FROM audit_logs a
-        WHERE (:entityType IS NULL OR a.entity_type = :entityType)
+        WHERE a.organization_id = :#{T(com.doctutorials.crm.tenant.TenantContext).currentOrSystem()}
+          AND (:entityType IS NULL OR a.entity_type = :entityType)
           AND (:actorUserId IS NULL OR a.actor_user_id = :actorUserId)
           AND (:action IS NULL OR a.action = :action)
           AND (:from IS NULL OR a.created_at >= :from)
@@ -41,12 +43,12 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
      * Merged, date-ordered journey for a lead = audit_logs on the lead itself
      * plus audit_logs on every child record (requirement, supplier enquiry,
      * activity, task, note, document, quotation) that belongs to it.
-     * Quotations are bridged via customers.converted_from_lead_id — see
-     * DELIVERABLE assumption #1.
+     * Quotations are bridged via customers.converted_from_lead_id.
      */
     @Query(value = """
         SELECT * FROM audit_logs a
-        WHERE (
+        WHERE a.organization_id = :#{T(com.doctutorials.crm.tenant.TenantContext).currentOrSystem()}
+        AND (
             (a.entity_type = 'Lead' AND a.entity_id = :leadId)
             OR (a.entity_type = 'Requirement' AND a.entity_id IN (SELECT id FROM requirements WHERE lead_id = :leadId))
             OR (a.entity_type = 'SupplierEnquiry' AND a.entity_id IN (SELECT id FROM supplier_enquiries WHERE lead_id = :leadId))
@@ -65,7 +67,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
         """,
         countQuery = """
         SELECT count(*) FROM audit_logs a
-        WHERE (
+        WHERE a.organization_id = :#{T(com.doctutorials.crm.tenant.TenantContext).currentOrSystem()}
+        AND (
             (a.entity_type = 'Lead' AND a.entity_id = :leadId)
             OR (a.entity_type = 'Requirement' AND a.entity_id IN (SELECT id FROM requirements WHERE lead_id = :leadId))
             OR (a.entity_type = 'SupplierEnquiry' AND a.entity_id IN (SELECT id FROM supplier_enquiries WHERE lead_id = :leadId))

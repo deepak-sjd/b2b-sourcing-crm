@@ -1,5 +1,6 @@
 package com.doctutorials.crm.security;
 
+import com.doctutorials.crm.tenant.TenantContext;
 import com.doctutorials.crm.user.User;
 import com.doctutorials.crm.user.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -21,10 +22,9 @@ import java.util.UUID;
 
 /**
  * Reads the "Authorization: Bearer <token>" header, validates it, and if valid,
- * populates the SecurityContext so downstream @PreAuthorize checks work.
- * Any failure here just leaves the request unauthenticated - it never throws,
- * so a bad/missing token degrades to "401 on protected endpoints" rather than
- * a 500 that crashes the request pipeline.
+ * populates the SecurityContext AND the TenantContext (taken from the user's
+ * organization in the database, never from a client-supplied value).
+ * Any failure just leaves the request unauthenticated and tenant-less.
  */
 @Component
 @RequiredArgsConstructor
@@ -37,32 +37,41 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                      @NonNull HttpServletResponse response,
                                      @NonNull FilterChain filterChain) throws ServletException, IOException {
-
-        String header = request.getHeader("Authorization");
-
-        if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7);
-            try {
-                if (jwtUtil.isTokenValid(token)) {
-                    UUID userId = jwtUtil.extractUserId(token);
-                    String role = jwtUtil.extractRole(token);
-
-                    Optional<User> userOpt = userRepository.findById(userId);
-                    if (userOpt.isPresent() && userOpt.get().isActive()
-                            && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                        var authToken = new UsernamePasswordAuthenticationToken(
-                                userOpt.get(), null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-                        SecurityContextHolder.getContext().setAuthentication(authToken);
-                    }
-                }
-            } catch (Exception ex) {
-                // Malformed/expired token: proceed unauthenticated, let Spring Security
-                // return 401/403 for protected endpoints instead of blowing up the filter chain.
-                SecurityContextHolder.clearContext();
-            }
+        try {
+            authenticate(request);
+            filterChain.doFilter(request, response);
+        } finally {
+            TenantContext.clear();
         }
+    }
 
-        filterChain.doFilter(request, response);
+    private void authenticate(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) {
+            return;
+        }
+        String token = header.substring(7);
+        try {
+            if (!jwtUtil.isTokenValid(token)) {
+                return;
+            }
+            UUID userId = jwtUtil.extractUserId(token);
+            String role = jwtUtil.extractRole(token);
+
+            Optional<User> userOpt = userRepository.findUnscopedById(userId);
+            if (userOpt.isPresent() && userOpt.get().isActive()
+                    && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+                User user = userOpt.get();
+                var authToken = new UsernamePasswordAuthenticationToken(
+                        user, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+                TenantContext.set(user.getOrganization().getId());
+            }
+        } catch (Exception ex) {
+            // Malformed/expired token: proceed unauthenticated and tenant-less.
+            SecurityContextHolder.clearContext();
+            TenantContext.clear();
+        }
     }
 }
