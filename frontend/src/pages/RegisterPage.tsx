@@ -11,6 +11,7 @@ import { validate, registerSchema } from "@/lib/validation";
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,18 +21,22 @@ export function RegisterPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const result = validate(registerSchema, { fullName, email, password });
-    if (!result.success) {
-      setErrors(result.errors);
+    const fieldErrors: Record<string, string> = result.success ? {} : { ...result.errors };
+    if (companyName.trim().length < 2) {
+      fieldErrors.companyName = "Company name is required";
+    }
+    if (!result.success || fieldErrors.companyName) {
+      setErrors(fieldErrors);
       return;
     }
     setErrors({});
     setSubmitting(true);
     try {
-      await authApi.register(result.data);
-      toast.success("Account created — log in to continue");
+      await authApi.signup({ companyName: companyName.trim(), ...result.data });
+      toast.success("Workspace created — log in to continue");
       navigate("/login", { replace: true });
     } catch (error) {
-      toast.error(extractErrorMessage(error, "Couldn't create your account"));
+      toast.error(extractErrorMessage(error, "Couldn't create your workspace"));
     } finally {
       setSubmitting(false);
     }
@@ -44,15 +49,20 @@ export function RegisterPage() {
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
             D
           </div>
-          <CardTitle className="text-lg font-semibold text-foreground">Create your account</CardTitle>
+          <CardTitle className="text-lg font-semibold text-foreground">Create your workspace</CardTitle>
           <CardDescription>
-            New accounts start as Counselor. An admin can grant a higher role afterward.
+            You become the admin of your own CRM workspace and can invite your team afterward.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
-              <Label htmlFor="fullName">Full name</Label>
+              <Label htmlFor="companyName">Company name</Label>
+              <Input id="companyName" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+              {errors.companyName && <p className="text-xs text-destructive">{errors.companyName}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="fullName">Your full name</Label>
               <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} />
               {errors.fullName && <p className="text-xs text-destructive">{errors.fullName}</p>}
             </div>
@@ -79,7 +89,7 @@ export function RegisterPage() {
               {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Creating account…" : "Create account"}
+              {submitting ? "Creating workspace…" : "Create workspace"}
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">

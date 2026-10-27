@@ -1,7 +1,14 @@
 import { apiClient } from "./client";
 import type { ApiResponse } from "@/types/api";
 import type { AuthResponse, LoginRequest } from "@/types/auth";
-import type { PublicRegisterRequest, UserResponse } from "@/types/user";
+
+// Mirrors com.doctutorials.crm.auth.dto.SignupRequest
+export interface SignupRequest {
+  companyName: string;
+  fullName: string;
+  email: string;
+  password: string;
+}
 
 export const authApi = {
   async login(payload: LoginRequest): Promise<AuthResponse> {
@@ -9,8 +16,8 @@ export const authApi = {
     return data.data;
   },
 
-  async register(payload: PublicRegisterRequest): Promise<UserResponse> {
-    const { data } = await apiClient.post<ApiResponse<UserResponse>>("/auth/register", payload);
+  async signup(payload: SignupRequest): Promise<AuthResponse> {
+    const { data } = await apiClient.post<ApiResponse<AuthResponse>>("/auth/signup", payload);
     return data.data;
   },
 
