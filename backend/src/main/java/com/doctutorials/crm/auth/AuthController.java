@@ -5,11 +5,8 @@ import com.doctutorials.crm.auth.dto.ForgotPasswordRequest;
 import com.doctutorials.crm.auth.dto.LoginRequest;
 import com.doctutorials.crm.auth.dto.RefreshTokenRequest;
 import com.doctutorials.crm.auth.dto.ResetPasswordRequest;
+import com.doctutorials.crm.auth.dto.SignupRequest;
 import com.doctutorials.crm.common.ApiResponse;
-import com.doctutorials.crm.user.User;
-import com.doctutorials.crm.user.UserService;
-import com.doctutorials.crm.user.dto.PublicRegisterRequest;
-import com.doctutorials.crm.user.dto.UserResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,12 +20,11 @@ public class AuthController {
     private static final String GENERIC_RESET_MESSAGE = "If an account exists for that email, a reset link has been sent.";
 
     private final AuthService authService;
-    private final UserService userService;
+    private final TenantSignupService tenantSignupService;
 
-    @PostMapping("/register")
-    public ResponseEntity<ApiResponse<UserResponse>> register(@Valid @RequestBody PublicRegisterRequest request) {
-        User user = userService.registerPublic(request);
-        return ResponseEntity.ok(ApiResponse.ok("User registered", UserResponse.from(user)));
+    @PostMapping("/signup")
+    public ResponseEntity<ApiResponse<AuthResponse>> signup(@Valid @RequestBody SignupRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok("Workspace created", tenantSignupService.signup(request)));
     }
 
     @PostMapping("/login")
@@ -49,8 +45,7 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        // Deliberately identical response whether or not the email exists -
-        // see AuthService.forgotPassword for why.
+        // Deliberately identical response whether or not the email exists.
         authService.forgotPassword(request.email());
         return ResponseEntity.ok(ApiResponse.ok(GENERIC_RESET_MESSAGE, null));
     }
