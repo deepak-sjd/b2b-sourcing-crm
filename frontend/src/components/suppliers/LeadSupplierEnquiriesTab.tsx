@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Boxes, CheckCircle2, Mail, Plus, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,21 +34,17 @@ const REPLY_STATUS_CLASS: Record<SupplierEnquiryReplyResponse["status"], string>
 
 function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open: boolean; onOpenChange: (o: boolean) => void }) {
   const queryClient = useQueryClient();
-  const [itemDescription, setItemDescription] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [notes, setNotes] = useState("");
+  const [message, setMessage] = useState("");
   const [requirementId, setRequirementId] = useState<string | null>(null);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>([]);
 
-  // Suppliers are org-wide master data (see Supplier.java's class comment) — a
-  // plain list of the first 100, active ones, is plenty for a picker checklist.
+  // Suppliers are org-wide master data — a plain list of the first 100 is plenty for a picker.
   const suppliersQuery = useQuery({
     queryKey: ["suppliers", "picker"],
     queryFn: () => suppliersApi.list({ size: 100 }),
     enabled: open,
   });
-  // Optional - lets this enquiry's chosen reply later be found by
-  // QuotationService.prefill instead of just living as a free-text item.
+  // An enquiry is always created from one of this lead's requirements.
   const requirementsQuery = useQuery({
     queryKey: ["requirements", "by-lead", leadId],
     queryFn: () => requirementsApi.byLead(leadId, 0, 100),
@@ -63,19 +59,14 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
   const create = useMutation({
     mutationFn: () =>
       supplierEnquiriesApi.create({
-        leadId,
-        requirementId,
-        itemDescription: itemDescription.trim(),
-        quantity: quantity.trim() || null,
-        notes: notes.trim() || null,
+        requirementId: requirementId as string,
         supplierIds: selectedSupplierIds,
+        message: message.trim() || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["supplier-enquiries", "lead", leadId] });
       toast.success("Enquiry sent to " + selectedSupplierIds.length + " supplier(s)");
-      setItemDescription("");
-      setQuantity("");
-      setNotes("");
+      setMessage("");
       setRequirementId(null);
       setSelectedSupplierIds([]);
       onOpenChange(false);
@@ -83,22 +74,11 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
     onError: (error) => toast.error(extractErrorMessage(error, "Couldn't send this enquiry")),
   });
 
-  function applyRequirement(id: string | null) {
-    setRequirementId(id);
-    const requirement = requirementsQuery.data?.content.find((r) => r.id === id);
-    if (requirement && !itemDescription.trim()) {
-      setItemDescription(requirement.productName);
-      if (requirement.quantity != null) {
-        setQuantity(`${requirement.quantity} ${requirement.unit ?? ""}`.trim());
-      }
-    }
-  }
-
   function toggleSupplier(id: string) {
     setSelectedSupplierIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   }
 
-  const canSubmit = itemDescription.trim().length > 0 && selectedSupplierIds.length > 0;
+  const canSubmit = requirementId !== null && selectedSupplierIds.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -112,7 +92,7 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
         <DialogHeader>
           <DialogTitle>Send a supplier enquiry</DialogTitle>
           <DialogDescription>
-            Describe what this lead needs and pick which suppliers to ask for a price.
+            Pick the requirement you need a price for, then choose which suppliers to ask.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -123,32 +103,18 @@ function NewEnquiryDialog({ leadId, open, onOpenChange }: { leadId: string; open
           className="space-y-3"
         >
           <div className="space-y-1.5">
-            <Label>Link to a requirement (optional)</Label>
+            <Label>Requirement</Label>
             <SearchSelect
               options={requirementOptions}
               value={requirementId}
-              onChange={applyRequirement}
-              placeholder={requirementOptions.length === 0 ? "This lead has no requirements yet" : "None"}
+              onChange={setRequirementId}
+              placeholder={requirementOptions.length === 0 ? "Add a requirement to this lead first" : "Select a requirement"}
               disabled={requirementOptions.length === 0}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="enq-item">Item / requirement</Label>
-            <Input
-              id="enq-item"
-              placeholder="e.g. 500 units of 6mm PVC sheet"
-              value={itemDescription}
-              onChange={(e) => setItemDescription(e.target.value)}
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="enq-qty">Quantity</Label>
-            <Input id="enq-qty" placeholder="e.g. 500 units" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="enq-notes">Notes</Label>
-            <Textarea id="enq-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Label htmlFor="enq-message">Message to suppliers (optional)</Label>
+            <Textarea id="enq-message" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} />
           </div>
           <div className="space-y-1.5">
             <Label>Send to</Label>
@@ -204,7 +170,7 @@ export function LeadSupplierEnquiriesTab({ leadId }: { leadId: string }) {
 
   const chooseReply = useMutation({
     mutationFn: ({ enquiryId, replyId }: { enquiryId: string; replyId: string }) =>
-      supplierEnquiriesApi.chooseReply(enquiryId, replyId),
+      supplierEnquiriesApi.choose(enquiryId, replyId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["supplier-enquiries", "lead", leadId] });
       toast.success("Set as the price reference for this enquiry");

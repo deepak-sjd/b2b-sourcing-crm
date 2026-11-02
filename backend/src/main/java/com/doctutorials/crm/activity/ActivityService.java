@@ -269,8 +269,12 @@ public class ActivityService {
         int currentIdx = FORWARD_STAGES.indexOf(lead.getStage());
         int targetIdx = FORWARD_STAGES.indexOf(target);
         if (currentIdx < 0 || targetIdx < 0) return; // WON/LOST or unknown - leave it alone
-        if (currentIdx < targetIdx) {
-            leadService.changeStage(lead.getId(), target);
+               if (currentIdx < targetIdx) {
+            try {
+                leadService.changeStage(lead.getId(), target);
+            } catch (BadRequestException ignored) {
+                // Funnel rules not met (e.g. no requirement yet): keep the stage, the call is still saved.
+            }
         }
     }
 

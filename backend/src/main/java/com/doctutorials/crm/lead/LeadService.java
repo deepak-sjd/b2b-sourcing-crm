@@ -8,6 +8,9 @@ import com.doctutorials.crm.lead.dto.LeadRequest;
 import com.doctutorials.crm.security.CurrentUserService;
 import com.doctutorials.crm.user.Role;
 import com.doctutorials.crm.user.User;
+import com.doctutorials.crm.requirement.RequirementRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.util.StringUtils;
 import com.doctutorials.crm.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +38,7 @@ public class LeadService {
     private final LeadAutoAssignmentService autoAssignmentService;
     private final AuditService auditService;
     private final LeadAccessService leadAccessService;
+        private final RequirementRepository requirementRepository;
     private final CurrentUserService currentUserService;
 
     @Value("${app.lead.stale-lead-threshold-days:7}")
@@ -77,18 +81,25 @@ public class LeadService {
      * endpoint let a caller flip a lead straight to LOST with zero reason
      * recorded, which is exactly the gap this feature closes.
      */
-    @Transactional
+        @Transactional
     public Lead changeStage(UUID id, LeadStage newStage) {
+        return moveStage(id, newStage, false);
+    }
+
+    /** The only way into QUOTATION: called by QuotationService when a quotation is sent. */
+    @Transactional
+    public Lead moveToQuotationStage(UUID id) {
+        return moveStage(id, LeadStage.QUOTATION, true);
+    }
+
+    private Lead moveStage(UUID id, LeadStage newStage, boolean fromQuotationFlow) {
         Lead lead = getById(id);
         LeadStage oldStage = lead.getStage();
 
-        if (oldStage == LeadStage.WON || oldStage == LeadStage.LOST) {
-            throw new BadRequestException("Cannot move a lead out of a closed stage (" + oldStage + ")");
-        }
-        if (newStage == LeadStage.WON || newStage == LeadStage.LOST) {
-            throw new BadRequestException(
-                    "Use the Mark Won / Mark Lost action to close a lead - " + newStage + " requires closure details");
-        }
+        boolean contactable = StringUtils.hasText(lead.getPhone()) || StringUtils.hasText(lead.getEmail());
+        boolean hasRequirement = newStage == LeadStage.OPPORTUNITY
+                && requirementRepository.findByLeadId(id, PageRequest.of(0, 1)).hasContent();
+        LeadStageRules.validateMove(oldStage, newStage, contactable, hasRequirement, fromQuotationFlow);
 
         lead.setStage(newStage);
         scoringService.rescore(lead);
@@ -104,6 +115,7 @@ public class LeadService {
     @Transactional
     public Lead markWon(UUID id, BigDecimal finalValue, String remarks) {
         Lead lead = getById(id);
+                LeadStageRules.requireFinalValue(finalValue);
         assertOpenStage(lead);
 
         LeadStage oldStage = lead.getStage();

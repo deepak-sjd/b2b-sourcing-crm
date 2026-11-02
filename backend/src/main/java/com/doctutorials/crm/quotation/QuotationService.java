@@ -155,7 +155,7 @@ public class QuotationService {
         if (newStatus == QuotationStatus.SENT && quotation.getLead() != null) {
             Lead lead = quotation.getLead();
             if (lead.getStage().ordinal() < LeadStage.QUOTATION.ordinal()) {
-                leadService.changeStage(lead.getId(), LeadStage.QUOTATION);
+             leadService.moveToQuotationStage(lead.getId());
             }
             if (quotation.getRequirement() != null) {
                 Requirement requirement = quotation.getRequirement();
