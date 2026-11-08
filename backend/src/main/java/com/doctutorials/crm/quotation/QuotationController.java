@@ -88,6 +88,14 @@ public class QuotationController {
         return ResponseEntity.ok(ApiResponse.ok("Status updated", QuotationResponse.from(quotation)));
     }
 
+        @PostMapping("/{id}/revise")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
+    public ResponseEntity<ApiResponse<QuotationResponse>> revise(@PathVariable UUID id) {
+        Quotation revision = quotationService.revise(id);
+        return ResponseEntity.ok(ApiResponse.ok("Revision created", QuotationResponse.from(revision)));
+    }
+
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {

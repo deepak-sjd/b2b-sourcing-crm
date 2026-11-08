@@ -73,6 +73,9 @@ public class QuotationService {
     private static final Set<QuotationStatus> EXPIRABLE =
             Set.of(QuotationStatus.SENT, QuotationStatus.VIEWED, QuotationStatus.NEGOTIATION);
 
+    private static final Set<QuotationStatus> REVISABLE = Set.of(QuotationStatus.SENT, QuotationStatus.VIEWED,
+            QuotationStatus.NEGOTIATION, QuotationStatus.REJECTED, QuotationStatus.EXPIRED);
+
     private final QuotationRepository quotationRepository;
     private final QuotationAccessService quotationAccessService;
     private final CustomerService customerService;
@@ -127,7 +130,7 @@ public class QuotationService {
         if (!EDITABLE.contains(quotation.getStatus())) {
             throw new BadRequestException(
                     "This quotation is " + quotation.getStatus() + " and can't be edited - "
-                            + "move it back to DRAFT first if this needs to be reopened.");
+                            +"create a new revision to change it.");
         }
         // Customer/lead/requirement are fixed at creation time - a quotation doesn't move targets.
         applyRequest(quotation, req);
@@ -140,6 +143,9 @@ public class QuotationService {
     @Transactional
     public Quotation changeStatus(UUID id, QuotationStatus newStatus) {
         Quotation quotation = getById(id);
+                if (quotation.isSuperseded()) {
+            throw new BadRequestException("This revision was replaced by a newer one and can't change status.");
+        }
         QuotationStatus old = quotation.getStatus();
         if (old == newStatus) {
             return quotation;
@@ -257,7 +263,8 @@ public class QuotationService {
     }
 
     public QuotationSummary summary() {
-        var all = quotationRepository.findAll(Specification.where(quotationAccessService.quotationVisibility()));
+                var all = quotationRepository.findAll(Specification.where(quotationAccessService.quotationVisibility()))
+                .stream().filter(q -> !q.isSuperseded()).toList();
 
         long draft = all.stream().filter(q -> q.getStatus() == QuotationStatus.DRAFT).count();
         long pending = all.stream().filter(q -> Set.of(QuotationStatus.UNDER_REVIEW, QuotationStatus.SENT,
@@ -279,7 +286,7 @@ public class QuotationService {
     @Transactional
     public int expireOverdueQuotationsForSystemJob() {
         List<Quotation> overdue = quotationRepository.findByValidUntilBeforeAndStatusIn(
-                LocalDate.now(), List.copyOf(EXPIRABLE));
+                LocalDate.now(), List.copyOf(EXPIRABLE)).stream().filter(q -> !q.isSuperseded()).toList();
         for (Quotation q : overdue) {
             q.setStatus(QuotationStatus.EXPIRED);
             auditService.log("Quotation", q.getId(), AuditAction.STATUS_CHANGE,
@@ -289,6 +296,75 @@ public class QuotationService {
             quotationRepository.saveAll(overdue);
         }
         return overdue.size();
+    }
+
+
+
+        @Transactional
+    public Quotation revise(UUID id) {
+        Quotation source = getById(id);
+        if (source.isSuperseded()) {
+            throw new BadRequestException("This revision was already replaced - revise the latest revision instead.");
+        }
+        if (source.getStatus() == QuotationStatus.ACCEPTED) {
+            throw new BadRequestException("An accepted quotation is final. Create a new quotation for any changes.");
+        }
+        if (!REVISABLE.contains(source.getStatus())) {
+            throw new BadRequestException(
+                    "A " + source.getStatus() + " quotation can still be edited directly - no revision needed.");
+        }
+
+        Quotation root = source.getRoot() != null ? source.getRoot() : source;
+        int next = source.getRevisionNumber() + 1;
+
+        Quotation revision = new Quotation();
+        revision.setCustomer(source.getCustomer());
+        revision.setLead(source.getLead());
+        revision.setRequirement(source.getRequirement());
+        revision.setCustomerContact(source.getCustomerContact());
+        revision.setPreparedBy(currentUserService.get());
+        revision.setQuotationDate(LocalDate.now());
+        revision.setValidUntil(source.getValidUntil());
+        revision.setStatus(QuotationStatus.DRAFT);
+        revision.setCurrency(source.getCurrency());
+        revision.setTaxPercent(source.getTaxPercent());
+        revision.setTermsAndConditions(source.getTermsAndConditions());
+        revision.setRemarks(source.getRemarks());
+        revision.setRoot(root);
+        revision.setRevisionNumber(next);
+        revision.setQuotationNumber(root.getQuotationNumber() + "-R" + next);
+
+        for (QuotationLineItem line : source.getLineItems()) {
+            QuotationLineItem copy = new QuotationLineItem();
+            copy.setSortOrder(line.getSortOrder());
+            copy.setProductName(line.getProductName());
+            copy.setDescription(line.getDescription());
+            copy.setUnit(line.getUnit());
+            copy.setQuantity(line.getQuantity());
+            copy.setSupplier(line.getSupplier());           // supplier price trail is preserved
+            copy.setSupplierPrice(line.getSupplierPrice());
+            copy.setEnquiryReply(line.getEnquiryReply());
+            copy.setSellingPrice(line.getSellingPrice());
+            copy.setLineTotal(line.getLineTotal());
+            copy.setMarginAmount(line.getMarginAmount());
+            copy.setMarginPercent(line.getMarginPercent());
+            copy.setRemarks(line.getRemarks());
+            revision.addLineItem(copy);
+        }
+        revision.setSubtotal(source.getSubtotal());
+        revision.setTaxAmount(source.getTaxAmount());
+        revision.setGrandTotal(source.getGrandTotal());
+        revision.setTotalMarginAmount(source.getTotalMarginAmount());
+
+        Quotation saved = quotationRepository.save(revision);
+        source.setSuperseded(true); // version bump: two people revising at once -> one gets a 409
+        quotationRepository.save(source);
+
+        auditService.log("Quotation", saved.getId(), AuditAction.CREATE,
+                "Revision " + next + " created from " + source.getQuotationNumber());
+        auditService.log("Quotation", source.getId(), AuditAction.UPDATE,
+                "Superseded by " + saved.getQuotationNumber());
+        return saved;
     }
 
     // --- internals ---
