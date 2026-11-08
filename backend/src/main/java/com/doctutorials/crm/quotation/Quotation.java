@@ -105,6 +105,19 @@ public class Quotation extends BaseEntity {
     @Column(nullable = false)
     private BigDecimal totalMarginAmount = BigDecimal.ZERO;
 
+        /** 1 for the original; each revision adds 1. The number looks like QT-2026-0004-R2. */
+    @Column(nullable = false)
+    private int revisionNumber = 1;
+
+    /** The original (revision 1) of this quotation family; null on the original itself. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "root_id")
+    private Quotation root;
+
+    /** True once a newer revision exists; this one stays as a record of what was offered. */
+    @Column(nullable = false)
+    private boolean superseded = false;
+
     public void addLineItem(QuotationLineItem item) {
         item.setQuotation(this);
         lineItems.add(item);
