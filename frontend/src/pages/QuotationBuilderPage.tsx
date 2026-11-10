@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, PartyPopper, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Copy, PartyPopper, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import {
   emptyLineItem,
   type LineItemForm,
 } from "@/components/quotations/QuotationLineItemsEditor";
+
 import { quotationsApi } from "@/api/quotations";
 import { customersApi } from "@/api/customers";
 import { suppliersApi } from "@/api/suppliers";
@@ -186,6 +187,26 @@ export function QuotationBuilderPage() {
     onError: (error) => toast.error(extractErrorMessage(error, "Couldn't change status")),
   });
 
+
+    const reviseMutation = useMutation({
+    mutationFn: () => quotationsApi.revise(quotationId!),
+    onSuccess: (revision) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      queryClient.invalidateQueries({ queryKey: ["quotation", quotationId] });
+      toast.success(`Revision ${revision.revisionNumber} created as a draft`);
+      navigate(`/quotations/${revision.id}`);
+    },
+    onError: (error) => toast.error(extractErrorMessage(error, "Couldn't create a revision")),
+  });
+
+  const canRevise =
+    isEdit &&
+    !!quotationQuery.data &&
+    !quotationQuery.data.superseded &&
+    (["SENT", "VIEWED", "NEGOTIATION", "REJECTED", "EXPIRED"] as QuotationStatus[]).includes(
+      quotationQuery.data.status,
+    );
+
   async function handlePrefill() {
     if (!requirementPickerId) return;
     setPrefilling(true);
@@ -324,7 +345,7 @@ export function QuotationBuilderPage() {
         </div>
 
         {isEdit && quotationQuery.data && (
-          nextStatuses.length > 0 ? (
+              nextStatuses.length > 0 && !quotationQuery.data.superseded ? ( (
             <Select value={quotationQuery.data.status} onValueChange={(v) => statusMutation.mutate(v as QuotationStatus)}>
               <SelectTrigger className="w-44">
                 <SelectValue>
@@ -364,14 +385,29 @@ export function QuotationBuilderPage() {
         </Card>
       )}
 
-      {locked && (
+            {locked && quotationQuery.data && (
         <Card className="mb-5 border-amber-200 bg-amber-50">
-          <CardContent className="flex items-start gap-2 p-4 text-sm text-amber-800">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              This quotation is {quotationQuery.data?.status.toLowerCase()} and its contents are locked. Change the
-              status above to reopen it for editing.
+          <CardContent className="flex items-center justify-between gap-3 p-4 text-sm text-amber-800">
+            <p className="flex items-start gap-2">
+              <Sparkles className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                {quotationQuery.data.superseded
+                  ? "A newer revision replaced this one. It stays here as a record of what was offered."
+                  : `This quotation is ${quotationQuery.data.status.toLowerCase()} and locked as a record of what the customer saw.${canRevise ? " To change prices or terms, create a new revision." : ""}`}
+              </span>
             </p>
+            {canRevise && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-amber-300"
+                disabled={reviseMutation.isPending}
+                onClick={() => reviseMutation.mutate()}
+              >
+                <Copy className="h-4 w-4" />
+                {reviseMutation.isPending ? "Creating…" : "Create revision"}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

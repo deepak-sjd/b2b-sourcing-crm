@@ -131,6 +131,8 @@ export interface QuotationResponse {
   canMarkLeadWon: boolean;
   createdAt: string;
   updatedAt: string;
+  revisionNumber: number;
+  superseded: boolean;
 }
 
 // Mirrors com.doctutorials.crm.quotation.dto.QuotationRequest

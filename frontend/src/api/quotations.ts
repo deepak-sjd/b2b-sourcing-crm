@@ -72,6 +72,13 @@ export const quotationsApi = {
     return data.data;
   },
 
+
+
+    async revise(id: string): Promise<QuotationResponse> {
+    const { data } = await apiClient.post<ApiResponse<QuotationResponse>>(`/quotations/${id}/revise`);
+    return data.data;
+  },
+
   async remove(id: string): Promise<void> {
     await apiClient.delete<ApiResponse<null>>(`/quotations/${id}`);
   },
