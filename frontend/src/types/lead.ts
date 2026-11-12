@@ -195,3 +195,17 @@ export interface ScrapRequest {
   scrapReason: ScrapReason;
   remarks?: string | null;
 }
+
+export interface LeadImportIssue {
+  row: number;
+  name: string;
+  reason: string;
+}
+
+export interface LeadImportResult {
+  totalRows: number;
+  created: number;
+  duplicates: number;
+  failed: number;
+  issues: LeadImportIssue[];
+}

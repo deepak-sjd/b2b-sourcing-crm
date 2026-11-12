@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, LayoutGrid, Plus, Rows3, Search, Users2 } from "lucide-react";
+import { AlertTriangle, LayoutGrid, Plus, Rows3, Search, Upload, Users2 } from "lucide-react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,10 +14,12 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StageBadge, PriorityBadge, ScoreBadge, BuyingIntentBadge } from "@/components/leads/LeadBadges";
 import { LeadFormDialog } from "@/components/leads/LeadFormDialog";
+import { LeadImportDialog } from "@/components/leads/LeadImportDialog";
 import { LeadStatsBar } from "@/components/leads/LeadStatsBar";
 import { LeadBoardView } from "@/components/leads/LeadBoardView";
 import { leadsApi } from "@/api/leads";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useAuthStore } from "@/store/authStore";
 import { cn, formatRelativeDay, initials } from "@/lib/utils";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, type LeadStage } from "@/types/lead";
 
@@ -27,6 +29,10 @@ const BOARD_SIZE = 300; // Board view groups by stage client-side, so it needs t
 export function LeadsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const [importOpen, setImportOpen] = useState(false);
+  const role = useAuthStore((s) => s.user?.role);
+  const canImport = role === "SUPER_ADMIN" || role === "ADMIN" || role === "MANAGER";
 
   const [page, setPage] = useState(0);
   const [stage, setStage] = useState<LeadStage | "ALL">("ALL");
@@ -81,10 +87,18 @@ export function LeadsPage() {
         title="Leads"
         description="Your pipeline, one row per lead."
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New Lead
-          </Button>
+          <div className="flex gap-2">
+            {canImport && (
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4" />
+                Import
+              </Button>
+            )}
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New Lead
+            </Button>
+          </div>
         }
       />
 
@@ -255,6 +269,8 @@ export function LeadsPage() {
           queryClient.invalidateQueries({ queryKey: ["leads"] });
         }}
       />
+
+      <LeadImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

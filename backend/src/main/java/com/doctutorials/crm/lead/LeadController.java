@@ -16,7 +16,8 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
+import com.doctutorials.crm.lead.dto.LeadImportResult;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class LeadController {
 
     private final LeadService leadService;
+    private final LeadImportService leadImportService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER','COUNSELOR')")
@@ -96,6 +98,14 @@ public class LeadController {
     public ResponseEntity<ApiResponse<LeadResponse>> changeStage(@PathVariable UUID id, @RequestParam LeadStage stage) {
         Lead lead = leadService.changeStage(id, stage);
         return ResponseEntity.ok(ApiResponse.ok("Stage updated", toResponse(lead)));
+    }
+
+
+
+    @PostMapping("/import")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','MANAGER')")
+    public ResponseEntity<ApiResponse<LeadImportResult>> importLeads(@RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.ok(leadImportService.importCsv(file)));
     }
 
     @PostMapping("/{id}/won")

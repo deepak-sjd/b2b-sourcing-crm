@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type { ApiResponse, PageResponse } from "@/types/api";
 import type {
+  LeadImportResult,
   LeadListFilters,
   LeadRequest,
   LeadResponse,
@@ -101,6 +102,16 @@ export const leadsApi = {
 
   async atRisk(): Promise<LeadResponse[]> {
     const { data } = await apiClient.get<ApiResponse<LeadResponse[]>>("/leads/at-risk");
+    return data.data;
+  },
+
+  /** Bulk upload (PRD §5.1). Sent as multipart; the backend returns a per-row report. */
+  async importCsv(file: File): Promise<LeadImportResult> {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await apiClient.post<ApiResponse<LeadImportResult>>("/leads/import", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
     return data.data;
   },
 };
