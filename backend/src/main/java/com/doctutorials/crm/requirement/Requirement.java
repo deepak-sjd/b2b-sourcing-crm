@@ -1,6 +1,6 @@
 package com.doctutorials.crm.requirement;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.lead.Priority;
 import com.doctutorials.crm.user.User;
@@ -21,7 +21,7 @@ import java.time.LocalDate;
 })
 @Getter
 @Setter
-public class Requirement extends BaseEntity {
+public class Requirement extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lead_id")

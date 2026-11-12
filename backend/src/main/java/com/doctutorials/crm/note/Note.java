@@ -1,6 +1,6 @@
 package com.doctutorials.crm.note;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.user.User;
 import jakarta.persistence.*;
@@ -14,7 +14,7 @@ import lombok.Setter;
 })
 @Getter
 @Setter
-public class Note extends BaseEntity {
+public class Note extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lead_id")

@@ -1,6 +1,6 @@
 package com.doctutorials.crm.customer;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.user.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -20,7 +20,7 @@ import java.util.UUID;
 })
 @Getter
 @Setter
-public class Customer extends BaseEntity {
+public class Customer extends TenantEntity {
 
     @NotBlank
     @Column(nullable = false)

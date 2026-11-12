@@ -1,6 +1,6 @@
 package com.doctutorials.crm.document;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.customer.Customer;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.quotation.Quotation;
@@ -21,7 +21,7 @@ import java.time.Instant;
 @Table(name = "documents")
 @Getter
 @Setter
-public class Document extends BaseEntity {
+public class Document extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lead_id")

@@ -1,6 +1,6 @@
 package com.doctutorials.crm.customer;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -13,7 +13,7 @@ import lombok.Setter;
 })
 @Getter
 @Setter
-public class CustomerContact extends BaseEntity {
+public class CustomerContact extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "customer_id")

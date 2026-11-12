@@ -1,6 +1,6 @@
 package com.doctutorials.crm.supplier.enquiry;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.requirement.Requirement;
 import com.doctutorials.crm.user.User;
@@ -39,7 +39,7 @@ import java.util.List;
 })
 @Getter
 @Setter
-public class SupplierEnquiry extends BaseEntity {
+public class SupplierEnquiry extends TenantEntity {
 
     /** Sequence-backed, e.g. "ENQ-000042". Assigned once, never reused. */
     @Column(name = "enquiry_code", nullable = false, unique = true, updatable = false)

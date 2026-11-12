@@ -1,7 +1,7 @@
 package com.doctutorials.crm.task;
 
 import com.doctutorials.crm.activity.Activity;
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.customer.Customer;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.lead.Priority;
@@ -25,7 +25,7 @@ import java.time.Instant;
 })
 @Getter
 @Setter
-public class Task extends BaseEntity {
+public class Task extends TenantEntity {
 
     @NotBlank
     private String title;

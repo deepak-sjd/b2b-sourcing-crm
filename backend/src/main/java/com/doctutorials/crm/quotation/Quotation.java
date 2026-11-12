@@ -1,6 +1,6 @@
 package com.doctutorials.crm.quotation;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.customer.Customer;
 import com.doctutorials.crm.customer.CustomerContact;
 import com.doctutorials.crm.lead.Lead;
@@ -36,7 +36,7 @@ import java.util.List;
 })
 @Getter
 @Setter
-public class Quotation extends BaseEntity {
+public class Quotation extends TenantEntity {
 
     /** Server-generated, e.g. "QT-2026-0001" — see QuotationService.generateNumber. */
     @Column(nullable = false, unique = true, updatable = false)

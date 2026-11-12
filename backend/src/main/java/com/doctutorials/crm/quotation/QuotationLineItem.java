@@ -1,6 +1,6 @@
 package com.doctutorials.crm.quotation;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.supplier.Supplier;
 import com.doctutorials.crm.supplier.enquiry.SupplierEnquiryReply;
 import jakarta.persistence.*;
@@ -24,7 +24,7 @@ import java.math.BigDecimal;
 })
 @Getter
 @Setter
-public class QuotationLineItem extends BaseEntity {
+public class QuotationLineItem extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "quotation_id")

@@ -1,6 +1,6 @@
 package com.doctutorials.crm.supplier;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.user.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -26,7 +26,7 @@ import java.util.List;
 })
 @Getter
 @Setter
-public class Supplier extends BaseEntity {
+public class Supplier extends TenantEntity {
 
     /** Human-friendly short code shown in tables/exports, e.g. "SUP-0042". Assigned once, never reused. */
     @Column(nullable = false, unique = true, updatable = false)

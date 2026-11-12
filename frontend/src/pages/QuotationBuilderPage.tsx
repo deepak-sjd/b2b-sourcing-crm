@@ -345,7 +345,7 @@ export function QuotationBuilderPage() {
         </div>
 
         {isEdit && quotationQuery.data && (
-              nextStatuses.length > 0 && !quotationQuery.data.superseded ? ( (
+          nextStatuses.length > 0 && !quotationQuery.data.superseded ? (
             <Select value={quotationQuery.data.status} onValueChange={(v) => statusMutation.mutate(v as QuotationStatus)}>
               <SelectTrigger className="w-44">
                 <SelectValue>

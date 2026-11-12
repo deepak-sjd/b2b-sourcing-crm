@@ -1,6 +1,6 @@
 package com.doctutorials.crm.activity;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.lead.Lead;
 import com.doctutorials.crm.user.User;
 import jakarta.persistence.*;
@@ -29,7 +29,7 @@ import java.time.Instant;
 })
 @Getter
 @Setter
-public class Activity extends BaseEntity {
+public class Activity extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lead_id")

@@ -1,6 +1,6 @@
 package com.doctutorials.crm.contact;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.user.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -18,7 +18,7 @@ import java.time.Instant;
 })
 @Getter
 @Setter
-public class Contact extends BaseEntity {
+public class Contact extends TenantEntity {
 
     /** The person's name — e.g. "Mukesh", the contact at a customer/account. */
     @NotBlank

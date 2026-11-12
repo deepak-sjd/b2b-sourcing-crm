@@ -1,6 +1,6 @@
 package com.doctutorials.crm.lead;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.user.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -19,7 +19,7 @@ import java.util.UUID;
 })
 @Getter
 @Setter
-public class Lead extends BaseEntity {
+public class Lead extends TenantEntity {
 
     @NotBlank
     private String fullName;

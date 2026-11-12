@@ -1,6 +1,6 @@
 package com.doctutorials.crm.audit;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,7 +17,7 @@ import java.util.UUID;
 })
 @Getter
 @Setter
-public class AuditLog extends BaseEntity {
+public class AuditLog extends TenantEntity {
 
     private UUID actorUserId;
     private String actorName;

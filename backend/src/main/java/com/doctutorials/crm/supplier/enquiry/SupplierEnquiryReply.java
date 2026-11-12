@@ -1,6 +1,6 @@
 package com.doctutorials.crm.supplier.enquiry;
 
-import com.doctutorials.crm.common.BaseEntity;
+import com.doctutorials.crm.tenant.TenantEntity;
 import com.doctutorials.crm.requirement.Requirement;
 import com.doctutorials.crm.supplier.Supplier;
 import jakarta.persistence.*;
@@ -32,7 +32,7 @@ import java.time.LocalDate;
 })
 @Getter
 @Setter
-public class SupplierEnquiryReply extends BaseEntity {
+public class SupplierEnquiryReply extends TenantEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enquiry_id")
