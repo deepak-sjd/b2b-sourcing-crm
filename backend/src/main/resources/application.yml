@@ -27,14 +27,15 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate # schema is owned by Flyway migrations, never by Hibernate
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
+        enable_lazy_load_no_trans: true
         format_sql: true
         jdbc:
           batch_size: 30
-        order_inserts: true
+        order_inserts: true 
         order_updates: true
 
   flyway:
