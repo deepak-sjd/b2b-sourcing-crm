@@ -81,7 +81,7 @@ public class LeadService {
      * endpoint let a caller flip a lead straight to LOST with zero reason
      * recorded, which is exactly the gap this feature closes.
      */
-        @Transactional
+    @Transactional(noRollbackFor = BadRequestException.class)
     public Lead changeStage(UUID id, LeadStage newStage) {
         return moveStage(id, newStage, false);
     }
